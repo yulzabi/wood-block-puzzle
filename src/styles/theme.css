@@ -1,0 +1,203 @@
+/* ============================================================
+   Wood Block Puzzle — theme tokens, app-frame, native-feel base
+   ============================================================ */
+
+:root {
+  /* Wood-tone block materials (index 1..6 -> --wood-N). */
+  --wood-1: #c8894e; /* light oak     */
+  --wood-2: #b06f39; /* honey         */
+  --wood-3: #9a5a2c; /* chestnut      */
+  --wood-4: #d9a066; /* pale birch    */
+  --wood-5: #8a4b28; /* walnut        */
+  --wood-6: #b58a5a; /* driftwood     */
+
+  /* Structural colors */
+  --wood-bg: #3b2a1a;        /* deep backdrop (matches manifest background_color) */
+  --wood-bg-2: #2d2013;      /* darker vignette edge */
+  --wood-theme: #8a5a2b;     /* warm accent (matches manifest theme_color) */
+  --board-bg: #5a3d24;       /* board frame */
+  --board-inset: #4a3016;    /* board recess */
+  --cell-empty: #6b4a2c;     /* empty cell */
+  --cell-empty-hi: #7a5636;  /* empty cell highlight edge */
+
+  /* Preview highlight */
+  --preview-valid: #6fbf73;
+  --preview-invalid: #d9534f;
+
+  /* Text */
+  --text: #f6ead9;
+  --text-dim: #d8c3a6;
+
+  /* Layout */
+  --app-max-width: 480px;
+  --radius-block: 22%;
+  --radius-panel: 18px;
+
+  /* Safe-area insets (fall back to 0) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;              /* no page scroll */
+  overscroll-behavior: none;     /* no rubber-band bounce */
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--wood-bg) 0%, var(--wood-bg-2) 100%);
+
+  /* Native-app feel: no selection, no callout menus, no tap highlight */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Phone-like portrait column, centered, capped on desktop. */
+.app-frame {
+  position: relative;
+  width: 100%;
+  max-width: var(--app-max-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding:
+    calc(var(--safe-top) + 12px)
+    calc(var(--safe-right) + 12px)
+    calc(var(--safe-bottom) + 12px)
+    calc(var(--safe-left) + 12px);
+}
+
+/* Any grabbable game surface opts out of browser touch gestures. */
+.play-surface {
+  touch-action: none;
+}
+
+/* ---- Screens ---- */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  text-align: center;
+  padding: 0 20px;               /* keep content off the frame edges */
+}
+
+.screen[hidden] {
+  display: none;
+}
+
+.title {
+  font-size: clamp(28px, 8vw, 42px);
+  line-height: 1.08;             /* wrap gracefully on narrow phones */
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin: 0;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.subtitle {
+  margin: -12px 0 0;
+  color: var(--text-dim);
+  font-size: 15px;
+}
+
+/* ---- Buttons ---- */
+.btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: linear-gradient(180deg, var(--wood-2), var(--wood-5));
+  padding: 14px 34px;
+  border-radius: 999px;
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.btn:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.btn--primary {
+  font-size: 20px;
+}
+
+/* ---- Install affordance (home screen) ---- */
+.install-affordance {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.install-affordance[hidden] {
+  display: none;
+}
+.install-ios {
+  margin: 0;
+  max-width: 260px;
+  line-height: 1.5;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.install-ios strong {
+  color: var(--text);
+}
+.install-btn[hidden] {
+  display: none;
+}
+
+/* ---- App-like screen enter transition ---- */
+.screen-enter {
+  animation: screen-fade 0.24s ease-out;
+}
+@keyframes screen-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-enter {
+    animation: none;
+  }
+}

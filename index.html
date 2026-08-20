@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Wood Block Puzzle</title>
+
+    <!-- Full-viewport, notch-aware, no zoom: native-app feel -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#8a5a2b" />
+    <meta name="description" content="A cozy wood-themed block-placement puzzle." />
+
+    <!-- iOS standalone / home-screen behavior -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="WoodBlocks" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
+    <!-- iOS launch image (best-effort; iOS shows background_color otherwise) -->
+    <link rel="apple-touch-startup-image" href="/icons/splash.png" />
+
+    <link rel="stylesheet" href="/src/styles/theme.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
