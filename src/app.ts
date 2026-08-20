@@ -3,16 +3,30 @@
  *
  * Holds the single source of truth (`GameState`), wires the drag controller to
  * the pure engine, and applies each move's resulting state + events to the
- * views (render, animate, haptics, score pop-ups). Owns screen navigation:
- * home -> playing -> game-over -> restart.
+ * views (render, animate, haptics, score pop-ups). Owns screen navigation and
+ * both modes: Endless (home -> playing -> game-over) and Levels
+ * (home -> playing -> level-complete / level-failed).
  */
 
 import './styles/game.css';
 
 import type { GameState, Move } from './core/types';
-import { applyMove, newGame, restart, startGame } from './core/game';
+import {
+  applyMove,
+  newGame,
+  newLevelsGame,
+  nextLevel,
+  restart,
+  retryLevel,
+  startGame,
+} from './core/game';
 import { canPlace } from './core/board';
-import { loadHighScore, saveHighScore } from './platform/storage';
+import {
+  loadHighScore,
+  saveHighScore,
+  loadLevelProgress,
+  saveLevelProgress,
+} from './platform/storage';
 import { HAPTIC_CLEAR, HAPTIC_PLACE, vibrate } from './platform/haptics';
 import { createInstallController, type InstallController } from './platform/install';
 import {
@@ -20,6 +34,9 @@ import {
   renderGameOver,
   renderHome,
   renderInstallAffordance,
+  renderLevelComplete,
+  renderLevelFailed,
+  type InstallAffordance,
   type Screens,
 } from './ui/screens';
 import { BoardView } from './ui/board-view';
@@ -34,14 +51,22 @@ export class App {
   private readonly hud: HUD;
   private readonly drag: DragController;
   private readonly install: InstallController;
+  private readonly installAffordance: InstallAffordance | null;
   private state: GameState;
 
   constructor(root: HTMLElement) {
     this.screens = createScreens(root);
     this.install = createInstallController();
     this.install.init();
-    renderHome(this.screens.home, () => this.play());
-    this.setupInstall();
+
+    // Build the install affordance once; it's re-appended each time we render home.
+    this.installAffordance = renderInstallAffordance(this.install, () => {
+      void this.install.prompt();
+    });
+    if (this.installAffordance) {
+      window.addEventListener('beforeinstallprompt', () => this.installAffordance?.reveal());
+      window.addEventListener('appinstalled', () => this.installAffordance?.markInstalled());
+    }
 
     // Build the in-game layout: HUD (top), board (middle), tray (bottom).
     const layout = document.createElement('div');
@@ -67,24 +92,34 @@ export class App {
     this.drag.attach();
 
     this.state = newGame(Date.now(), loadHighScore());
+    this.renderHomeScreen();
     this.screens.show('home');
   }
 
-  /** Wire the home-screen install affordance to the platform controller. */
-  private setupInstall(): void {
-    const affordance = renderInstallAffordance(this.install, () => {
-      void this.install.prompt();
+  /** Render the home menu and (re)attach the install affordance below it. */
+  private renderHomeScreen(): void {
+    renderHome(this.screens.home, {
+      onLevels: () => this.playLevels(loadLevelProgress()),
+      onEndless: () => this.playEndless(),
+      currentLevel: loadLevelProgress(),
     });
-    if (!affordance) return;
-    this.screens.home.append(affordance.el);
-    // The browser fires `beforeinstallprompt` after load; reveal the button then.
-    window.addEventListener('beforeinstallprompt', () => affordance.reveal());
-    window.addEventListener('appinstalled', () => affordance.markInstalled());
+    if (this.installAffordance) this.screens.home.append(this.installAffordance.el);
   }
 
-  /** Start a brand-new game from the home screen. */
-  private play(): void {
+  /** Start an Endless game. */
+  private playEndless(): void {
     this.state = startGame(newGame(Date.now(), loadHighScore())).state;
+    this.enterGame();
+  }
+
+  /** Start a Levels game at `level`. */
+  private playLevels(level: number): void {
+    this.state = newLevelsGame(level, Date.now(), loadHighScore());
+    this.enterGame();
+  }
+
+  /** Shared entry into the in-game view. */
+  private enterGame(): void {
     this.hud.reset();
     this.renderAll();
     this.screens.show('game');
@@ -92,9 +127,35 @@ export class App {
   }
 
   private renderAll(): void {
-    this.boardView.renderBoard(this.state.board);
+    this.boardView.renderBoard(
+      this.state.board,
+      this.state.mode === 'levels' ? this.state.targets : undefined,
+    );
     this.trayView.renderTray(this.state.tray);
-    this.hud.render(this.state.score, this.state.highScore);
+    this.renderHud();
+  }
+
+  /** Draw the HUD variant appropriate to the current mode. */
+  private renderHud(): void {
+    if (this.state.mode === 'levels') {
+      this.hud.renderLevels(
+        this.state.level,
+        this.state.score,
+        this.state.targetScore,
+        this.targetsLeft(),
+        this.state.targetsTotal,
+      );
+    } else {
+      this.hud.render(this.state.score, this.state.highScore);
+    }
+  }
+
+  /** Count of target blocks still on the board (Levels mode). */
+  private targetsLeft(): number {
+    const t = this.state.targets;
+    let n = 0;
+    for (let i = 0; i < t.length; i++) if (t[i] !== 0) n++;
+    return n;
   }
 
   /** Apply a placement Move and reflect the resulting state + events in the UI. */
@@ -107,7 +168,10 @@ export class App {
     this.drag.setInteractive(false);
 
     // Reflect the new board/tray truth first, then animate the events.
-    this.boardView.renderBoard(this.state.board);
+    this.boardView.renderBoard(
+      this.state.board,
+      this.state.mode === 'levels' ? this.state.targets : undefined,
+    );
     this.trayView.renderTray(this.state.tray);
 
     let popAt: { x: number; y: number } | null = null;
@@ -134,21 +198,31 @@ export class App {
           this.trayView.renderTray(this.state.tray);
           break;
         }
-        case 'gameover':
-          // handled after the loop so the final board renders first
+        // 'gameover' / 'levelcomplete' / 'levelfailed' handled after the loop
+        // so the final board renders first.
+        default:
           break;
       }
     }
 
-    this.hud.render(this.state.score, this.state.highScore);
+    this.renderHud();
 
-    if (this.state.status === 'gameover') {
-      this.endGame();
-      return;
+    switch (this.state.status) {
+      case 'gameover':
+        this.endGame();
+        return;
+      case 'levelcomplete':
+        this.onLevelComplete();
+        return;
+      case 'levelfailed':
+        this.onLevelFailed();
+        return;
+      default:
+        this.drag.setInteractive(true);
     }
-    this.drag.setInteractive(true);
   }
 
+  // ---- Endless game over ----
   private endGame(): void {
     const prevHigh = loadHighScore();
     const isNewHigh = this.state.score > prevHigh;
@@ -166,14 +240,44 @@ export class App {
 
   private restartGame(): void {
     this.state = restart(this.state).state;
-    this.hud.reset();
-    this.renderAll();
-    this.screens.show('game');
-    this.drag.setInteractive(true);
+    this.enterGame();
+  }
+
+  // ---- Levels ----
+  private onLevelComplete(): void {
+    // Unlock the next level.
+    saveLevelProgress(this.state.level + 1);
+    renderLevelComplete(this.screens.gameover, {
+      level: this.state.level,
+      score: this.state.score,
+      onNext: () => this.goNextLevel(),
+      onHome: () => this.goHome(),
+    });
+    this.screens.show('gameover');
+  }
+
+  private goNextLevel(): void {
+    this.state = nextLevel(this.state).state;
+    this.enterGame();
+  }
+
+  private onLevelFailed(): void {
+    renderLevelFailed(this.screens.gameover, {
+      level: this.state.level,
+      onRetry: () => this.retryCurrentLevel(),
+      onHome: () => this.goHome(),
+    });
+    this.screens.show('gameover');
+  }
+
+  private retryCurrentLevel(): void {
+    this.state = retryLevel(this.state).state;
+    this.enterGame();
   }
 
   private goHome(): void {
     this.state = newGame(Date.now(), loadHighScore());
+    this.renderHomeScreen(); // refresh the "resume at level N" hint
     this.screens.show('home');
   }
 }

@@ -46,14 +46,31 @@ export type Board = Uint8Array;
 
 export type Screen = 'home' | 'playing' | 'gameover';
 
+/** Which game mode a session is running. */
+export type GameMode = 'endless' | 'levels';
+
+/**
+ * Full lifecycle status of a session. Endless uses home/playing/gameover;
+ * Levels adds levelcomplete/levelfailed.
+ */
+export type GameStatus = 'home' | 'playing' | 'gameover' | 'levelcomplete' | 'levelfailed';
+
 export interface GameState {
   readonly board: Board;
   readonly tray: readonly Piece[]; // length TRAY_SIZE; placed pieces flagged
   readonly score: number;
   readonly highScore: number;
-  readonly status: Screen;
+  readonly status: GameStatus;
   readonly rngState: number; // current PRNG state (seedable/deterministic)
   readonly pieceSeq: number; // counter for unique piece ids
+
+  // --- Mode ---
+  readonly mode: GameMode;
+  // Levels mode fields (0 / empty mask for endless):
+  readonly level: number; // current level number (0 in endless)
+  readonly targetScore: number; // score needed to clear the level (0 in endless)
+  readonly targets: Uint8Array; // length 64 mask, 1 = a target block still to clear
+  readonly targetsTotal: number; // initial target count (for HUD progress)
 }
 
 /** The only mutation the engine accepts. */
@@ -68,7 +85,9 @@ export type GameEvent =
   | { type: 'cleared'; rows: number[]; cols: number[]; cells: Coord[] }
   | { type: 'scored'; delta: number; total: number; kind: 'placement' | 'clear' }
   | { type: 'refill'; pieces: Piece[] }
-  | { type: 'gameover'; finalScore: number; highScore: number };
+  | { type: 'gameover'; finalScore: number; highScore: number }
+  | { type: 'levelcomplete'; level: number; score: number }
+  | { type: 'levelfailed'; level: number };
 
 export interface MoveResult {
   readonly ok: boolean; // false if the move was invalid (no state change)

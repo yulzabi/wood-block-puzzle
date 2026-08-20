@@ -178,8 +178,16 @@ export function renderGameOver(gameover: HTMLElement, opts: GameOverOpts): void 
   panel.classList.add('enter');
 }
 
-/** Populate the home screen (title + Play button). */
-export function renderHome(home: HTMLElement, onPlay: () => void): void {
+/** Options for the home-screen mode menu. */
+export interface HomeOpts {
+  onLevels(): void;
+  onEndless(): void;
+  /** The level the player will resume at (shown as a hint). */
+  currentLevel: number;
+}
+
+/** Populate the home screen (title + a mode menu: Levels / Endless). */
+export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   home.textContent = '';
 
   const title = el('h1', 'title');
@@ -188,13 +196,114 @@ export function renderHome(home: HTMLElement, onPlay: () => void): void {
   const subtitle = el('p', 'subtitle');
   subtitle.textContent = 'Fit the blocks. Clear the lines.';
 
-  const play = document.createElement('button');
-  play.className = 'btn btn--primary';
-  play.type = 'button';
-  play.textContent = 'Play';
-  play.addEventListener('click', onPlay);
+  const menu = el('div', 'home-menu');
 
-  home.append(title, subtitle, play);
+  const levels = document.createElement('button');
+  levels.className = 'btn btn--primary';
+  levels.type = 'button';
+  levels.textContent = 'Levels';
+  levels.addEventListener('click', opts.onLevels);
+
+  const endless = document.createElement('button');
+  endless.className = 'btn btn--primary';
+  endless.type = 'button';
+  endless.textContent = 'Endless';
+  endless.addEventListener('click', opts.onEndless);
+
+  menu.append(levels, endless);
+
+  const hint = el('p', 'home-hint');
+  hint.textContent = `Levels resume at level ${opts.currentLevel}`;
+
+  home.append(title, subtitle, menu, hint);
+}
+
+/** Options for the level-complete overlay. */
+export interface LevelCompleteOpts {
+  readonly level: number;
+  readonly score: number;
+  onNext(): void;
+  onHome(): void;
+}
+
+/** Populate the overlay for a cleared level (Level N Complete!, score, Next, Home). */
+export function renderLevelComplete(overlay: HTMLElement, opts: LevelCompleteOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel');
+
+  const label = el('p', 'gameover-score-label');
+  label.textContent = `LEVEL ${opts.level}`;
+
+  const score = el('p', 'gameover-score');
+  score.textContent = String(opts.score);
+
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'Complete!';
+
+  const next = document.createElement('button');
+  next.className = 'btn btn--primary';
+  next.type = 'button';
+  next.textContent = 'Next level';
+  next.addEventListener('click', opts.onNext);
+
+  const home = document.createElement('button');
+  home.className = 'btn btn--ghost';
+  home.type = 'button';
+  home.textContent = 'Home';
+  home.addEventListener('click', opts.onHome);
+
+  panel.append(label, score, title, next, home);
+  overlay.append(panel);
+  replayEnter(panel);
+}
+
+/** Options for the level-failed overlay. */
+export interface LevelFailedOpts {
+  readonly level: number;
+  onRetry(): void;
+  onHome(): void;
+}
+
+/** Populate the overlay for a failed level (Level Failed, Retry, Home). */
+export function renderLevelFailed(overlay: HTMLElement, opts: LevelFailedOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel');
+
+  const label = el('p', 'gameover-score-label');
+  label.textContent = `LEVEL ${opts.level}`;
+
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'Level Failed';
+
+  const hint = el('p', 'gameover-best');
+  hint.textContent = 'No moves left — try again';
+
+  const retry = document.createElement('button');
+  retry.className = 'btn btn--primary';
+  retry.type = 'button';
+  retry.textContent = 'Retry';
+  retry.addEventListener('click', opts.onRetry);
+
+  const home = document.createElement('button');
+  home.className = 'btn btn--ghost';
+  home.type = 'button';
+  home.textContent = 'Home';
+  home.addEventListener('click', opts.onHome);
+
+  panel.append(label, title, hint, retry, home);
+  overlay.append(panel);
+  replayEnter(panel);
+}
+
+/** Retrigger the panel enter animation. */
+function replayEnter(panel: HTMLElement): void {
+  panel.classList.remove('enter');
+  void panel.offsetWidth;
+  panel.classList.add('enter');
 }
 
 function el(tag: string, className: string): HTMLElement {

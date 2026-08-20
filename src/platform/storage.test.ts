@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { loadHighScore, saveHighScore } from './storage';
+import { loadHighScore, saveHighScore, loadLevelProgress, saveLevelProgress } from './storage';
 
 const KEY = 'wbp.v1.highscore';
+const LEVEL_KEY = 'wbp.v1.level';
 
 function makeMockStorage() {
   const map = new Map<string, string>();
@@ -83,5 +84,60 @@ describe('storage', () => {
     saveHighScore(-1);
     saveHighScore(2.7);
     expect(loadHighScore()).toBe(0);
+  });
+});
+
+describe('level progress', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips a saved level', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveLevelProgress(7);
+    expect(loadLevelProgress()).toBe(7);
+  });
+
+  it('defaults to 1 when the key is missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadLevelProgress()).toBe(1);
+  });
+
+  it('defaults to 1 on corrupt / out-of-range values', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(LEVEL_KEY, 'nope');
+    expect(loadLevelProgress()).toBe(1);
+    map.set(LEVEL_KEY, '0');
+    expect(loadLevelProgress()).toBe(1);
+    map.set(LEVEL_KEY, '-3');
+    expect(loadLevelProgress()).toBe(1);
+    map.set(LEVEL_KEY, '2.5');
+    expect(loadLevelProgress()).toBe(1);
+  });
+
+  it('defaults to 1 without throwing when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadLevelProgress()).not.toThrow();
+    expect(loadLevelProgress()).toBe(1);
+  });
+
+  it('does not persist invalid levels', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveLevelProgress(0);
+    saveLevelProgress(-2);
+    saveLevelProgress(1.5);
+    expect(loadLevelProgress()).toBe(1);
+  });
+
+  it('save is a silent no-op when setItem throws', () => {
+    const { storage, raw } = makeMockStorage();
+    raw.setItem.mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    vi.stubGlobal('localStorage', storage);
+    expect(() => saveLevelProgress(4)).not.toThrow();
   });
 });

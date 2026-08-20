@@ -62,8 +62,12 @@ export class BoardView {
     container.append(this.el);
   }
 
-  /** Reconcile every cell to empty or a wood-tone block by material index. */
-  renderBoard(board: Board): void {
+  /**
+   * Reconcile every cell to empty or a wood-tone block by material index.
+   * In Levels mode a `targets` mask (1 = a block that must still be cleared) marks
+   * those cells as "target" so they read as goal blockers; endless passes nothing.
+   */
+  renderBoard(board: Board, targets?: Uint8Array): void {
     for (let i = 0; i < this.cells.length; i++) {
       const cell = this.cells[i];
       if (!cell) continue;
@@ -75,6 +79,8 @@ export class BoardView {
         cell.classList.remove('filled');
         cell.style.removeProperty('--block');
       }
+      const isTarget = !!targets && (targets[i] ?? 0) !== 0;
+      cell.classList.toggle('target', isTarget);
     }
   }
 

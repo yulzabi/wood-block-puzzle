@@ -29,7 +29,7 @@
   --text-dim: #d8c3a6;
 
   /* Layout */
-  --app-max-width: 480px;
+  --app-max-width: 620px;
   --radius-block: 22%;
   --radius-panel: 18px;
 
@@ -77,10 +77,12 @@ body {
   justify-content: center;
 }
 
-/* Phone-like portrait column, centered, capped on desktop. */
+/* Phone-like portrait column, centered. On phones it fills the width; on wider
+   desktop windows it scales up with the viewport height (staying phone-shaped)
+   up to a generous cap, so it no longer looks tiny on a monitor. */
 .app-frame {
   position: relative;
-  width: 100%;
+  width: min(100%, calc(100dvh * 0.66));
   max-width: var(--app-max-width);
   height: 100%;
   display: flex;
@@ -155,6 +157,23 @@ body {
 
 .btn--primary {
   font-size: 20px;
+}
+
+/* ---- Home mode menu ---- */
+.home-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 300px;
+}
+.home-menu .btn {
+  width: 100%;
+}
+.home-hint {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
 }
 
 /* ---- Install affordance (home screen) ---- */

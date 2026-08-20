@@ -6,12 +6,20 @@
  *   placed, [cleared], scored (x1-2), [refill], [gameover].
  */
 
-import type { GameEvent, GameState, Move, MoveResult, Piece, RejectReason } from './types';
+import type { Coord, GameEvent, GameState, GameStatus, Move, MoveResult, Piece, RejectReason } from './types';
 import { TRAY_SIZE } from './types';
-import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, inBounds, place } from './board';
+import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, idx, inBounds, place } from './board';
 import { generatePieces } from './pieces';
+import { generateLevel } from './levels';
 import { lineClearScore, placementScore } from './scoring';
 import { seedState } from './rng';
+
+/** Count the set cells in a 0/1 mask. */
+function countMask(mask: Uint8Array): number {
+  let n = 0;
+  for (let i = 0; i < mask.length; i++) if (mask[i] !== 0) n++;
+  return n;
+}
 
 /** Fresh state on the home screen (no tray yet; `startGame` deals the first hand). */
 export function newGame(seed: number, highScore: number): GameState {
@@ -23,10 +31,15 @@ export function newGame(seed: number, highScore: number): GameState {
     status: 'home',
     rngState: seedState(seed),
     pieceSeq: 0,
+    mode: 'endless',
+    level: 0,
+    targetScore: 0,
+    targets: createBoard(),
+    targetsTotal: 0,
   };
 }
 
-/** Internal: begin a fresh round (fresh board + a new tray of 3), preserving RNG + high score. */
+/** Internal: begin a fresh endless round (fresh board + a new tray of 3), preserving RNG + high score. */
 function beginPlaying(state: GameState): GameState {
   const { pieces, rngState, nextSeq } = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
   return {
@@ -37,6 +50,31 @@ function beginPlaying(state: GameState): GameState {
     status: 'playing',
     rngState,
     pieceSeq: nextSeq,
+    mode: 'endless',
+    level: 0,
+    targetScore: 0,
+    targets: createBoard(),
+    targetsTotal: 0,
+  };
+}
+
+/** Internal: begin a fresh Levels round for `level`, preserving RNG + high score. */
+function beginLevel(state: GameState, level: number): GameState {
+  const gen = generateLevel(level);
+  const { pieces, rngState, nextSeq } = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+  return {
+    board: gen.board,
+    tray: pieces,
+    score: 0,
+    highScore: state.highScore,
+    status: 'playing',
+    rngState,
+    pieceSeq: nextSeq,
+    mode: 'levels',
+    level,
+    targetScore: gen.targetScore,
+    targets: gen.targets,
+    targetsTotal: countMask(gen.targets),
   };
 }
 
@@ -48,6 +86,26 @@ export function startGame(state: GameState): MoveResult {
 /** Restart after game over: fresh board + tray, score 0, keep highScore, status='playing'. */
 export function restart(state: GameState): MoveResult {
   return { ok: true, state: beginPlaying(state), events: [] };
+}
+
+/** Start a brand-new Levels game at `level`, seeding the tray RNG from `seed`. */
+export function newLevelsGame(level: number, seed: number, highScore: number): GameState {
+  return beginLevel(newGame(seed, highScore), level);
+}
+
+/** Enter a specific level from an existing state (preserving high score + advancing RNG). */
+export function startLevel(state: GameState, level: number): MoveResult {
+  return { ok: true, state: beginLevel(state, level), events: [] };
+}
+
+/** Advance to the next level after a level-complete. */
+export function nextLevel(state: GameState): MoveResult {
+  return startLevel(state, state.level + 1);
+}
+
+/** Retry the current level after a level-failed (same board pattern, fresh tray). */
+export function retryLevel(state: GameState): MoveResult {
+  return startLevel(state, state.level);
 }
 
 /** True iff no unplaced tray piece has any placement on the board. */
@@ -90,9 +148,11 @@ export function applyMove(state: GameState, move: Move): MoveResult {
   const { rows, cols } = findFullLines(placed.board);
   const lineCount = rows.length + cols.length;
   let board = placed.board;
+  let clearedCells: Coord[] = [];
   if (lineCount > 0) {
     const cleared = clearLines(placed.board, rows, cols);
     board = cleared.board;
+    clearedCells = cleared.cells;
     events.push({ type: 'cleared', rows, cols, cells: cleared.cells });
   }
 
@@ -118,18 +178,49 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'refill', pieces: refill.pieces });
   }
 
-  // 5. High score + game-over (evaluated against the post-refill tray).
+  // 5. High score.
   const highScore = Math.max(state.highScore, score);
+
+  // 6. Update the target mask: any cleared cell that was a target is now gone.
+  const targets = state.targets.slice();
+  for (const c of clearedCells) targets[idx(c.row, c.col)] = 0;
+  const targetsRemaining = countMask(targets);
+
+  // 7. Resolve end-of-move status per mode (against the post-refill tray).
   const unplaced = tray.filter((p) => !p.placed);
-  const gameOver = unplaced.length > 0 && unplaced.every((p) => !hasAnyPlacement(board, p.shape));
-  const status = gameOver ? 'gameover' : 'playing';
-  if (gameOver) {
+  const deadEnd = unplaced.length > 0 && unplaced.every((p) => !hasAnyPlacement(board, p.shape));
+
+  let status: GameStatus = 'playing';
+  if (state.mode === 'levels') {
+    // Winning (targets cleared AND score reached) takes precedence over a dead-end.
+    if (targetsRemaining === 0 && score >= state.targetScore) {
+      status = 'levelcomplete';
+      events.push({ type: 'levelcomplete', level: state.level, score });
+    } else if (deadEnd) {
+      status = 'levelfailed';
+      events.push({ type: 'levelfailed', level: state.level });
+    }
+  } else if (deadEnd) {
+    status = 'gameover';
     events.push({ type: 'gameover', finalScore: score, highScore });
   }
 
   return {
     ok: true,
-    state: { board, tray, score, highScore, status, rngState, pieceSeq },
+    state: {
+      board,
+      tray,
+      score,
+      highScore,
+      status,
+      rngState,
+      pieceSeq,
+      mode: state.mode,
+      level: state.level,
+      targetScore: state.targetScore,
+      targets,
+      targetsTotal: state.targetsTotal,
+    },
     events,
   };
 }

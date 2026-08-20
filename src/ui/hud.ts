@@ -5,8 +5,15 @@
 
 export class HUD {
   readonly el: HTMLElement;
+  // Endless row (SCORE / BEST).
+  private readonly endlessRow: HTMLElement;
   private readonly scoreEl: HTMLElement;
   private readonly highEl: HTMLElement;
+  // Levels row (LEVEL / BLOCKS / SCORE toward target).
+  private readonly levelsRow: HTMLElement;
+  private readonly levelEl: HTMLElement;
+  private readonly blocksEl: HTMLElement;
+  private readonly lvlScoreEl: HTMLElement;
   private displayed = 0;
   private raf = 0;
   private startTs = 0;
@@ -17,36 +24,45 @@ export class HUD {
     this.el = container;
     this.el.classList.add('hud');
 
-    const scoreBox = document.createElement('div');
-    scoreBox.className = 'hud-box hud-score';
-    const scoreLabel = document.createElement('span');
-    scoreLabel.className = 'hud-label';
-    scoreLabel.textContent = 'SCORE';
-    this.scoreEl = document.createElement('span');
-    this.scoreEl.className = 'hud-value';
-    this.scoreEl.textContent = '0';
-    scoreBox.append(scoreLabel, this.scoreEl);
+    // --- Endless row ---
+    this.endlessRow = row();
+    this.scoreEl = box(this.endlessRow, 'SCORE', 'hud-score');
+    this.highEl = box(this.endlessRow, 'BEST', 'hud-high');
 
-    const highBox = document.createElement('div');
-    highBox.className = 'hud-box hud-high';
-    const highLabel = document.createElement('span');
-    highLabel.className = 'hud-label';
-    highLabel.textContent = 'BEST';
-    this.highEl = document.createElement('span');
-    this.highEl.className = 'hud-value';
-    this.highEl.textContent = '0';
-    highBox.append(highLabel, this.highEl);
+    // --- Levels row ---
+    this.levelsRow = row('hud--levels');
+    this.levelsRow.hidden = true;
+    this.levelEl = box(this.levelsRow, 'LEVEL', 'hud-level');
+    this.blocksEl = box(this.levelsRow, 'BLOCKS', 'hud-blocks');
+    this.lvlScoreEl = box(this.levelsRow, 'SCORE', 'hud-lvlscore');
 
-    this.el.append(scoreBox, highBox);
+    this.el.append(this.endlessRow, this.levelsRow);
   }
 
-  /** Update the display, tweening the score toward its new value. */
+  /** Endless HUD: score (tweened) + persisted best. */
   render(score: number, highScore: number): void {
+    this.endlessRow.hidden = false;
+    this.levelsRow.hidden = true;
     this.highEl.textContent = String(highScore);
     this.tweenTo(score);
   }
 
-  /** Snap both values to zero (used when a fresh game starts). */
+  /** Levels HUD: current level, blocks left (remaining/total), score toward target. */
+  renderLevels(
+    level: number,
+    score: number,
+    targetScore: number,
+    remaining: number,
+    total: number,
+  ): void {
+    this.endlessRow.hidden = true;
+    this.levelsRow.hidden = false;
+    this.levelEl.textContent = String(level);
+    this.blocksEl.textContent = `${remaining}/${total}`;
+    this.lvlScoreEl.textContent = `${score}/${targetScore}`;
+  }
+
+  /** Snap the tweened endless score to zero (used when a fresh game starts). */
   reset(): void {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
@@ -94,4 +110,26 @@ export class HUD {
     // Safety net in case animationend never fires.
     window.setTimeout(() => pop.remove(), 1200);
   }
+}
+
+/** Build a HUD row (a flex line of boxes). */
+function row(extra = ''): HTMLElement {
+  const el = document.createElement('div');
+  el.className = extra ? `hud-row ${extra}` : 'hud-row';
+  return el;
+}
+
+/** Append a labeled value box to `parent`; return the value element. */
+function box(parent: HTMLElement, label: string, cls: string): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = `hud-box ${cls}`;
+  const lbl = document.createElement('span');
+  lbl.className = 'hud-label';
+  lbl.textContent = label;
+  const val = document.createElement('span');
+  val.className = 'hud-value';
+  val.textContent = '0';
+  wrap.append(lbl, val);
+  parent.append(wrap);
+  return val;
 }
