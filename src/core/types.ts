@@ -103,6 +103,10 @@ export type RejectReason = 'not-found' | 'occupied' | 'out-of-bounds' | 'already
 export type GameEvent =
   | { type: 'placed'; cells: Coord[]; material: number }
   | { type: 'cleared'; rows: number[]; cols: number[]; cells: Coord[] }
+  // Emitted after `cleared`, before `refill`, when a clear removes gems (Levels
+  // gems goal). `cleared` = per-color gems removed this move; `totals` = the
+  // cumulative per-color gems cleared so far (for HUD progress vs quotas).
+  | { type: 'gemsCleared'; cleared: Record<number, number>; totals: Record<number, number> }
   | { type: 'scored'; delta: number; total: number; kind: 'placement' | 'clear' }
   | { type: 'combo'; streak: number; multiplier: number; lines: number }
   | { type: 'refill'; pieces: Piece[] }

@@ -14,7 +14,7 @@ import { generatePieces } from './pieces';
 import { createBoard, idx } from './board';
 import { makeShape } from './shapes';
 import { BOARD_SIZE, TRAY_SIZE } from './types';
-import type { GameEvent, GameState, Piece, Shape } from './types';
+import type { GameEvent, GameState, GoalType, Piece, Shape } from './types';
 
 const single = makeShape('single', [[0, 0]]);
 const square2 = makeShape('square2', [[0, 0], [0, 1], [1, 0], [1, 1]]);
@@ -71,6 +71,9 @@ function levelsState(opts: {
   targetScore?: number;
   level?: number;
   highScore?: number;
+  goalType?: GoalType;
+  quotas?: Record<number, number>;
+  gemsCleared?: Record<number, number>;
 }): GameState {
   return {
     board: opts.board,
@@ -83,11 +86,11 @@ function levelsState(opts: {
     streak: 0,
     mode: 'levels',
     level: opts.level ?? 1,
-    goalType: 'score',
+    goalType: opts.goalType ?? 'score',
     targetScore: opts.targetScore ?? 100,
     gems: opts.gems,
-    quotas: quotasFromMask(opts.gems),
-    gemsCleared: {},
+    quotas: opts.quotas ?? quotasFromMask(opts.gems),
+    gemsCleared: opts.gemsCleared ?? {},
     gemSupplyRemaining: {},
   };
 }
@@ -315,57 +318,110 @@ describe('levels — start / progression', () => {
   });
 });
 
-describe('levels — applyMove resolution', () => {
-  it('clearing a line removes its gem cells and does not mutate the input channel', () => {
+describe('levels — applyMove resolution (either/or win)', () => {
+  it('emits gemsCleared after cleared and before refill, tallying per color', () => {
+    // Row 0 filled cols 1..7 with gems of color 3; complete it with a single at (0,0).
     const board = createBoard();
-    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
     const gems = createBoard();
-    gems[idx(0, 1)] = 1;
-    gems[idx(0, 2)] = 1;
-    const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, gems, tray, score: 0, targetScore: 9999 });
+    for (let c = 1; c < BOARD_SIZE; c++) {
+      board[idx(0, c)] = 3;
+      gems[idx(0, c)] = 3;
+    }
+    // Whole tray is this one piece so its placement triggers a refill too.
+    const tray = [piece('s', single, 4)];
+    const state = levelsState({
+      board,
+      gems,
+      tray,
+      goalType: 'gems',
+      quotas: { 3: 20 }, // far from met, so the level stays playing
+      gemsCleared: { 3: 2 }, // pre-existing progress accumulates
+    });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
     expect(res.ok).toBe(true);
-    expect(types(res.events)).toContain('cleared');
-    expect(maskCount(res.state.gems)).toBe(0);
-    expect(res.state.status).toBe('playing'); // gems gone but score < targetScore
-    // input channel untouched
-    expect(state.gems[idx(0, 1)]).toBe(1);
+    const seq = types(res.events);
+    // Ordering contract: cleared -> gemsCleared -> refill.
+    expect(seq.indexOf('gemsCleared')).toBeGreaterThan(seq.indexOf('cleared'));
+    expect(seq.indexOf('gemsCleared')).toBeLessThan(seq.indexOf('refill'));
+
+    const gc = res.events.find((e) => e.type === 'gemsCleared');
+    expect(gc).toMatchObject({ cleared: { 3: 7 }, totals: { 3: 9 } }); // 2 + 7
+    expect(res.state.gemsCleared).toEqual({ 3: 9 });
+    // The cleared row's gems are gone from the board.
+    for (let c = 0; c < BOARD_SIZE; c++) expect(res.state.gems[idx(0, c)]).toBe(0);
+    expect(res.state.status).toBe('playing'); // 9 < quota 20
+
+    // Input channel untouched (purity).
+    expect(state.gems[idx(0, 1)]).toBe(3);
+    expect(state.gemsCleared).toEqual({ 3: 2 });
   });
 
-  it('stays playing when the score is reached but gems remain', () => {
+  it('gem goal completes when every quota is met — regardless of score', () => {
+    const board = createBoard();
+    const gems = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) {
+      board[idx(0, c)] = 1;
+      gems[idx(0, c)] = 1;
+    }
+    const tray = [piece('s', single, 4), piece('z', square2, 5)];
+    // Need 7 of color 1; the row holds exactly 7. targetScore huge + irrelevant.
+    const state = levelsState({ board, gems, tray, goalType: 'gems', quotas: { 1: 7 }, targetScore: 9999, level: 2 });
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
+
+    expect(res.state.gemsCleared).toEqual({ 1: 7 });
+    expect(res.state.status).toBe('levelcomplete'); // quota met even though score << 9999
+    expect(res.events.find((e) => e.type === 'levelcomplete')).toMatchObject({ level: 2 });
+  });
+
+  it('gem goal stays playing when quotas are unmet — even with a high score', () => {
+    // score alone must NOT win a gem level (either/or: the combined && is gone).
     const board = createBoard();
     const gems = createBoard();
     board[idx(5, 5)] = 2;
     gems[idx(5, 5)] = 1; // an isolated gem we will NOT clear
     const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, gems, tray, score: 100, targetScore: 10 });
+    const state = levelsState({ board, gems, tray, goalType: 'gems', quotas: { 1: 1 }, score: 9999, targetScore: 10 });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
     expect(res.state.status).toBe('playing');
-    expect(res.state.score).toBeGreaterThanOrEqual(10);
-    expect(maskCount(res.state.gems)).toBe(1);
+    expect(res.state.score).toBeGreaterThanOrEqual(9999);
+    expect(maskCount(res.state.gems)).toBe(1); // quota still unmet
   });
 
-  it('completes the level only when BOTH gems are cleared and the score is reached', () => {
+  it('score goal completes on reaching the score — regardless of remaining gems', () => {
+    // gems present but not fully cleared; reaching the score still wins (either/or).
     const board = createBoard();
     for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1;
     const gems = createBoard();
-    gems[idx(0, 3)] = 1;
+    gems[idx(5, 5)] = 1; // a gem far away that we will NOT clear
+    board[idx(5, 5)] = 1;
     const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, gems, tray, score: 0, targetScore: 10, level: 2 });
+    const state = levelsState({ board, gems, tray, goalType: 'score', score: 0, targetScore: 10, level: 2 });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
-    // placement (+1) + row clear (+10) = 11 >= 10, and the only gem was in row 0
+    // placement (+1) + row clear (+10) = 11 >= 10 -> complete, even with a gem left.
     expect(res.state.score).toBe(11);
-    expect(maskCount(res.state.gems)).toBe(0);
+    expect(maskCount(res.state.gems)).toBe(1);
     expect(res.state.status).toBe('levelcomplete');
-    expect(types(res.events)).toContain('levelcomplete');
     expect(res.events.find((e) => e.type === 'levelcomplete')).toMatchObject({ level: 2, score: 11 });
+  });
+
+  it('score goal stays playing below the target score', () => {
+    const board = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1;
+    const gems = createBoard();
+    gems[idx(0, 1)] = 1;
+    const tray = [piece('s', single, 4), piece('z', square2, 5)];
+    const state = levelsState({ board, gems, tray, goalType: 'score', score: 0, targetScore: 9999 });
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
+
+    expect(res.state.status).toBe('playing'); // score 11 < 9999
   });
 
   it('fails the level on a dead-end that is not yet complete', () => {

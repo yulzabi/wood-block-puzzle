@@ -14,11 +14,19 @@ import { generateLevel } from './levels';
 import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 import { seedState } from './rng';
 
-/** Count the set cells in a 0/1 mask. */
-function countMask(mask: Uint8Array): number {
-  let n = 0;
-  for (let i = 0; i < mask.length; i++) if (mask[i] !== 0) n++;
-  return n;
+/** Add two per-color count maps into a new one. */
+function mergeCounts(a: Record<number, number>, b: Record<number, number>): Record<number, number> {
+  const out: Record<number, number> = { ...a };
+  for (const [color, n] of Object.entries(b)) out[Number(color)] = (out[Number(color)] ?? 0) + n;
+  return out;
+}
+
+/** True iff every color's cleared count meets its quota (a gems-goal win). */
+function quotasMet(quotas: Record<number, number>, cleared: Record<number, number>): boolean {
+  for (const [color, need] of Object.entries(quotas)) {
+    if ((cleared[Number(color)] ?? 0) < need) return false;
+  }
+  return true;
 }
 
 /** Fresh state on the home screen (no tray yet; `startGame` deals the first hand). */
@@ -168,6 +176,31 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'cleared', rows, cols, cells: cleared.cells });
   }
 
+  // 2b. Gem accounting (Levels only): drop any cleared gems, tally them per
+  //     color, and accumulate. Emitted after `cleared`, before `refill`. Endless
+  //     carries no gems, so it does zero gem work here.
+  let gems = state.gems;
+  let gemsCleared = state.gemsCleared;
+  if (state.mode === 'levels' && clearedCells.length > 0) {
+    const nextGems = state.gems.slice();
+    const clearedByColor: Record<number, number> = {};
+    let removed = 0;
+    for (const c of clearedCells) {
+      const i = idx(c.row, c.col);
+      const color = nextGems[i];
+      if (color) {
+        clearedByColor[color] = (clearedByColor[color] ?? 0) + 1;
+        nextGems[i] = 0;
+        removed++;
+      }
+    }
+    if (removed > 0) {
+      gems = nextGems;
+      gemsCleared = mergeCounts(state.gemsCleared, clearedByColor);
+      events.push({ type: 'gemsCleared', cleared: clearedByColor, totals: gemsCleared });
+    }
+  }
+
   // 3. Streak (strike): clearing lines on consecutive placements builds a streak
   //    that multiplies the line-clear bonus; a no-clear placement resets it.
   const streak = lineCount > 0 ? state.streak + 1 : 0;
@@ -199,20 +232,19 @@ export function applyMove(state: GameState, move: Move): MoveResult {
   // 6. High score.
   const highScore = Math.max(state.highScore, score);
 
-  // 7. Update the gem channel: any cleared cell that held a gem is now gone.
-  const gems = state.gems.slice();
-  for (const c of clearedCells) gems[idx(c.row, c.col)] = 0;
-  const gemsRemaining = countMask(gems);
-
-  // 8. Resolve end-of-move status per mode (against the post-refill tray).
+  // 7. Resolve end-of-move status per mode (against the post-refill tray).
   const unplaced = tray.filter((p) => !p.placed);
   const deadEnd = unplaced.length > 0 && unplaced.every((p) => !hasAnyPlacement(board, p.shape));
 
   let status: GameStatus = 'playing';
   if (state.mode === 'levels') {
-    // Winning (gems cleared AND score reached) takes precedence over a dead-end.
-    // (P3: this combined condition splits into either-gems-or-score in a later slice.)
-    if (gemsRemaining === 0 && score >= state.targetScore) {
+    // Either/or win (takes precedence over a dead-end): a gems level needs every
+    // color quota met; a score level needs the target score. Never both.
+    const won =
+      state.goalType === 'gems'
+        ? quotasMet(state.quotas, gemsCleared)
+        : score >= state.targetScore;
+    if (won) {
       status = 'levelcomplete';
       events.push({ type: 'levelcomplete', level: state.level, score });
     } else if (deadEnd) {
@@ -241,7 +273,7 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       targetScore: state.targetScore,
       gems,
       quotas: state.quotas,
-      gemsCleared: state.gemsCleared,
+      gemsCleared,
       gemSupplyRemaining: state.gemSupplyRemaining,
     },
     events,
