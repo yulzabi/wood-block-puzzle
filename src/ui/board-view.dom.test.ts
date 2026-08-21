@@ -39,7 +39,7 @@ describe('BoardView (DOM)', () => {
     expect(c1.getAttribute('aria-label')).toContain('empty');
   });
 
-  it('renders a colored gem diamond on gem cells and labels them by color', () => {
+  it('renders a colored gemstone on gem cells and labels them by color', () => {
     const board = createBoard();
     const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
     board[5] = 2;
@@ -50,12 +50,16 @@ describe('BoardView (DOM)', () => {
     const marker = c5.querySelector('.gem');
     expect(marker).not.toBeNull();
     expect(marker!.classList.contains('gem--1')).toBe(true);
-    // The stone is a four-point diamond polygon (not a rotated square).
+    // A flat-top gemstone silhouette (table + girdle + point) — not a rhombus.
     const stone = marker!.querySelector('polygon.gem__stone');
     expect(stone).not.toBeNull();
-    expect(stone!.getAttribute('points')).toBe('50,6 94,50 50,94 6,50');
-    expect(marker!.querySelector('.gem__letter')?.textContent).toBe('R'); // colorblind cue
-    expect(c5.getAttribute('aria-label')).toContain('red diamond');
+    expect(stone!.getAttribute('points')).toBe('26,18 74,18 98,44 50,98 2,44');
+    // Facet lines make it read as a cut gem (not a flat colored shape).
+    expect(marker!.querySelector('path.gem__lines')).not.toBeNull();
+    // The gem is the cell's content, not a marker layered on the wood block.
+    expect(c5.classList.contains('has-gem')).toBe(true);
+    expect(c5.classList.contains('filled')).toBe(false);
+    expect(c5.getAttribute('aria-label')).toContain('red gem');
 
     // A cell without a gem has no marker.
     expect(cells()[6]!.querySelector('.gem')).toBeNull();

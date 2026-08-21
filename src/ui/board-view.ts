@@ -97,16 +97,20 @@ export class BoardView {
       const cell = this.cells[i];
       if (!cell) continue;
       const material = board[i] ?? 0;
-      if (material > 0) {
+      const gemColor = gems ? gems[i] ?? 0 : 0;
+
+      // A gem cell shows its diamond as the cell's content (no wood-block fill),
+      // so the gem reads clearly instead of a wood tile with a marker on it.
+      if (material > 0 && gemColor === 0) {
         cell.classList.add('filled');
         cell.style.setProperty('--block', `var(--wood-${material})`);
-      } else if (cell.classList.contains('filled')) {
-        cell.classList.remove('filled');
+      } else {
+        if (cell.classList.contains('filled')) cell.classList.remove('filled');
         cell.style.removeProperty('--block');
       }
+      cell.classList.toggle('has-gem', gemColor > 0);
 
       // Gem diamond: add/update/remove only when the cell's gem color changes.
-      const gemColor = gems ? gems[i] ?? 0 : 0;
       if (gemColor !== this.cellGem[i]) {
         cell.querySelector('.gem')?.remove();
         if (gemColor > 0) cell.append(buildGemMarker(gemColor));
@@ -115,7 +119,7 @@ export class BoardView {
 
       const row = Math.floor(i / BOARD_SIZE);
       const col = i % BOARD_SIZE;
-      const desc = gemColor > 0 ? `${gemColorName(gemColor)} diamond` : material > 0 ? 'filled' : 'empty';
+      const desc = gemColor > 0 ? `${gemColorName(gemColor)} gem` : material > 0 ? 'filled' : 'empty';
       cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, ${desc}`);
     }
   }

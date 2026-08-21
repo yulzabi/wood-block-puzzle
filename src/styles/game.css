@@ -155,36 +155,35 @@
   transition: transform 0.12s ease;
 }
 
-/* Gem markers (Levels gems goal): a colored, faceted diamond with a letter cue.
-   Rendered as an inline SVG so it scales to any cell size (board or tray). Static
-   — no animation — so it is inherently reduced-motion-safe. The letter makes
-   colors distinguishable without relying on hue (color-blind-safe). */
+/* Gem markers (Levels gems goal): a colored, faceted cut-gemstone (flat top,
+   pointed bottom — not a rotated square). Rendered as an inline SVG so it scales
+   to any cell size (board or tray). Static — no animation — so it is inherently
+   reduced-motion-safe. */
 .gem {
   position: absolute;
-  inset: 12%;
-  width: 76%;
-  height: 76%;
+  inset: 6%;
+  width: 88%;
+  height: 88%;
   pointer-events: none;
   overflow: visible;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
 }
 .gem__stone {
   fill: var(--gem);
-  stroke: rgba(0, 0, 0, 0.4);
+  stroke: rgba(0, 0, 0, 0.45);
   stroke-width: 3;
-  stroke-linejoin: round; /* soften the diamond's four corners */
-}
-.gem__facet {
-  fill: rgba(255, 255, 255, 0.3);
   stroke-linejoin: round;
 }
-.gem__letter {
-  fill: #fff;
-  font-size: 46px;
-  font-weight: 900;
-  paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.55);
-  stroke-width: 4;
+.gem__facet {
+  fill: rgba(255, 255, 255, 0.16);
+}
+/* Internal facet edges of the cut — the lines that make it read as a gem. */
+.gem__lines {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .cell.filled {
