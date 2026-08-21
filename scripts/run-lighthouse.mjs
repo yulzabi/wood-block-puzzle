@@ -44,17 +44,15 @@ async function waitForServer(url, timeoutMs = 20000) {
   throw new Error(`Preview server did not start at ${url} within ${timeoutMs}ms`);
 }
 
-/** Build the app and return the reported Workbox precache entry count. */
+/** Build the app (fresh dist). Throws on build failure. Does NOT scrape the
+ *  build log — the precache count is derived from dist/sw.js in checkOffline(). */
 function build() {
   console.log('› Building (base=/)…');
   const res = spawnSync('npm', ['run', 'build'], { cwd: ROOT, encoding: 'utf8' });
-  const out = `${res.stdout ?? ''}${res.stderr ?? ''}`;
   if (res.status !== 0) {
-    console.error(out);
+    console.error(`${res.stdout ?? ''}${res.stderr ?? ''}`);
     throw new Error('Build failed');
   }
-  const m = out.match(/precache\s+(\d+)\s+entries/i);
-  return m ? Number(m[1]) : 0;
 }
 
 /** Validate the served manifest represents an installable PWA. */
@@ -86,10 +84,11 @@ async function checkInstallable() {
   return { ok: problems.length === 0, problems, manifest: m };
 }
 
-/** Confirm the offline precache includes the app shell. */
-function checkOffline(precacheCount) {
+/** Confirm the offline precache includes the app shell. The precache list — and
+ *  its count — is read straight from dist/sw.js (the source of truth), not from
+ *  the build log, so it survives build-tool output-format changes. */
+function checkOffline() {
   const problems = [];
-  if (precacheCount <= 0) problems.push('Workbox precache is empty');
   let sw = '';
   try {
     sw = readFileSync(join(ROOT, 'dist', 'sw.js'), 'utf8');
@@ -97,16 +96,18 @@ function checkOffline(precacheCount) {
     problems.push('dist/sw.js not found');
   }
   const urls = [...sw.matchAll(/url:\s*"([^"]+)"/g)].map((x) => x[1]);
+  const count = urls.length;
+  if (count <= 0) problems.push('Workbox precache is empty');
   const joined = urls.join('\n');
   if (!/index\.html/.test(joined)) problems.push('index.html not precached');
   if (!/\.js/.test(joined)) problems.push('no JS precached');
   if (!/\.css/.test(joined)) problems.push('no CSS precached');
   if (!/icon-512\.png/.test(joined)) problems.push('icons not precached');
-  return { ok: problems.length === 0, problems, count: precacheCount, urls };
+  return { ok: problems.length === 0, problems, count, urls };
 }
 
 async function main() {
-  const precacheCount = build();
+  build();
 
   console.log('› Starting preview server…');
   const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], {
@@ -126,10 +127,23 @@ async function main() {
     const runner = await lighthouse(URL, { port: chrome.port, output: 'json', logLevel: 'error' });
     const lhr = runner.lhr;
 
+    // A Lighthouse runtimeError (e.g. NO_FCP) leaves every category score null.
+    // Surface it loudly and fail the run — silently printing "n/a" is exactly what
+    // let the NO_FCP first-paint regression slip through unnoticed.
+    const runtimeError = lhr.runtimeError;
+    if (runtimeError) {
+      fail(`Lighthouse runtime error [${runtimeError.code}]: ${runtimeError.message}`);
+      console.error('   → category scores are unavailable for this run.');
+    }
+
     console.log('\n=== Lighthouse categories ===');
-    for (const cat of Object.values(lhr.categories)) {
-      const pct = cat.score == null ? 'n/a' : `${Math.round(cat.score * 100)}`;
-      console.log(`  ${cat.title.padEnd(16)} ${pct}`);
+    if (runtimeError) {
+      console.log('  (unavailable — see the runtime error above)');
+    } else {
+      for (const cat of Object.values(lhr.categories)) {
+        const pct = cat.score == null ? 'n/a' : `${Math.round(cat.score * 100)}`;
+        console.log(`  ${cat.title.padEnd(16)} ${pct}`);
+      }
     }
 
     console.log('\n=== PWA installability (explicit) ===');
@@ -138,7 +152,7 @@ async function main() {
     else inst.problems.forEach((p) => console.log(`  ✗ ${p}`));
 
     console.log('\n=== Offline capability (precache) ===');
-    const off = checkOffline(precacheCount);
+    const off = checkOffline();
     if (off.ok) console.log(`  ✅ offline-ready: ${off.count} assets precached (html, js, css, icons)`);
     else off.problems.forEach((p) => console.log(`  ✗ ${p}`));
 
