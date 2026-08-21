@@ -121,6 +121,53 @@ export function clearLines(
   return { board: next, cells };
 }
 
+/**
+ * The rows and columns a VALID placement of `shape` at `at` would complete
+ * (fill entirely) — used to preview "what you'll clear" while dragging. Returns
+ * empty lists if the placement is invalid. A line counts only if the placement
+ * both fills it and contributes at least one of its cells. Pure; no allocation
+ * of a board copy.
+ */
+export function linesCompletedBy(board: Board, shape: Shape, at: Coord): { rows: number[]; cols: number[] } {
+  if (!canPlace(board, shape, at)) return { rows: [], cols: [] };
+
+  const covered = new Set<number>();
+  for (const c of shape.cells) covered.add(idx(at.row + c.row, at.col + c.col));
+
+  const rows: number[] = [];
+  const cols: number[] = [];
+
+  for (let row = 0; row < BOARD_SIZE; row++) {
+    let full = true;
+    let touches = false;
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      const i = idx(row, col);
+      if (covered.has(i)) touches = true;
+      else if (board[i] === 0) {
+        full = false;
+        break;
+      }
+    }
+    if (full && touches) rows.push(row);
+  }
+
+  for (let col = 0; col < BOARD_SIZE; col++) {
+    let full = true;
+    let touches = false;
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      const i = idx(row, col);
+      if (covered.has(i)) touches = true;
+      else if (board[i] === 0) {
+        full = false;
+        break;
+      }
+    }
+    if (full && touches) cols.push(col);
+  }
+
+  return { rows, cols };
+}
+
 /** True iff `shape` can be placed at any position on the board. */
 export function hasAnyPlacement(board: Board, shape: Shape): boolean {
   const maxRow = BOARD_SIZE - shape.height;

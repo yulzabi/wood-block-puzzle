@@ -7,6 +7,7 @@ import {
   hasAnyPlacement,
   idx,
   inBounds,
+  linesCompletedBy,
   place,
 } from './board';
 import { makeShape } from './shapes';
@@ -158,5 +159,50 @@ describe('hasAnyPlacement', () => {
     b[idx(4, 4)] = 0;
     expect(hasAnyPlacement(b, single)).toBe(true);
     expect(hasAnyPlacement(b, square2)).toBe(false);
+  });
+});
+
+describe('linesCompletedBy', () => {
+  const LAST = BOARD_SIZE - 1;
+
+  it('reports a single row a valid placement would complete', () => {
+    const b = createBoard();
+    for (let col = 0; col < LAST; col++) b[idx(0, col)] = 1; // row 0 full except (0, last)
+    const res = linesCompletedBy(b, single, { row: 0, col: LAST });
+    expect(res.rows).toEqual([0]);
+    expect(res.cols).toEqual([]);
+  });
+
+  it('reports a row and column completed at once', () => {
+    const b = createBoard();
+    for (let col = 0; col < LAST; col++) b[idx(0, col)] = 1; // row 0 full except (0, last)
+    for (let row = 1; row < BOARD_SIZE; row++) b[idx(row, LAST)] = 1; // col last full except (0, last)
+    const res = linesCompletedBy(b, single, { row: 0, col: LAST });
+    expect(res.rows).toEqual([0]);
+    expect(res.cols).toEqual([LAST]);
+  });
+
+  it('reports nothing when the placement completes no line', () => {
+    const res = linesCompletedBy(createBoard(), single, { row: 0, col: 0 });
+    expect(res.rows).toEqual([]);
+    expect(res.cols).toEqual([]);
+  });
+
+  it('returns empty for an invalid (overlapping) placement, even over a full-looking line', () => {
+    const b = createBoard();
+    for (let col = 0; col < BOARD_SIZE; col++) b[idx(0, col)] = 1; // row 0 already occupied
+    const res = linesCompletedBy(b, single, { row: 0, col: LAST }); // invalid: cell occupied
+    expect(res.rows).toEqual([]);
+    expect(res.cols).toEqual([]);
+  });
+
+  it('completes multiple rows at once with a multi-row piece', () => {
+    const b = createBoard();
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < BOARD_SIZE - 2; col++) b[idx(row, col)] = 1; // rows 0,1 full except last 2 cols
+    }
+    const res = linesCompletedBy(b, square2, { row: 0, col: BOARD_SIZE - 2 });
+    expect(res.rows).toEqual([0, 1]);
+    expect(res.cols).toEqual([]);
   });
 });
