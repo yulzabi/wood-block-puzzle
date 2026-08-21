@@ -187,34 +187,33 @@ export class DragController {
     const s = this.session;
     if (!s) return;
     const effY = y - s.lift;
-    const pointerCell = this.cfg.boardView.clientToCoord(x, effY);
 
+    // P0.6 (pattern A): the ghost floats under the finger EVERY frame, decoupled
+    // from the cell-preview diff below — so it never freezes while the pointer
+    // moves within a single cell. P0.3's key only guards the board highlight
+    // (the expensive DOM class churn), never the ghost transform.
+    this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
+
+    const pointerCell = this.cfg.boardView.clientToCoord(x, effY);
     if (pointerCell) {
       const origin = resolveOrigin(pointerCell, s.anchor);
       const valid = this.cfg.canPlaceAt(s.piece.shape, origin);
       s.origin = origin;
       s.valid = valid;
-      // Diff: only touch the DOM when the previewed cell/validity changes. While
-      // the pointer moves within the same cell this is a no-op — the preview and
-      // the grid-snapped ghost are already correct.
+      // Only re-highlight the landing cells when they (or validity) actually change.
       const key = `${origin.row},${origin.col},${valid ? 1 : 0}`;
       if (key !== this.lastKey) {
         this.lastKey = key;
         this.cfg.boardView.showPreview(absCells(s.piece.shape, origin), valid);
-        const snap = this.cfg.boardView.cellOriginClient(origin);
-        if (snap) this.moveGhost(snap.x, snap.y);
-        else this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
       }
     } else {
       s.origin = null;
       s.valid = false;
-      // Clear the preview once on the transition off-grid; the ghost keeps
-      // free-following the pointer every frame.
+      // Clear the highlight once on the transition off-grid (ghost keeps floating).
       if (this.lastKey !== 'off') {
         this.lastKey = 'off';
         this.cfg.boardView.clearPreview();
       }
-      this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
     }
   }
 
