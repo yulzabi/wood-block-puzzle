@@ -51,4 +51,33 @@ describe('generateLevel', () => {
       expect(filled).toBeLessThan(CELL); // room remains
     }
   });
+
+  it('is deterministic across a range of levels (locks layouts against RNG changes)', () => {
+    for (const n of [1, 5, 20, 60]) {
+      const a = generateLevel(n);
+      const b = generateLevel(n);
+      expect(Array.from(a.targets)).toEqual(Array.from(b.targets));
+      expect(Array.from(a.board)).toEqual(Array.from(b.board));
+      expect(a.targetScore).toBe(b.targetScore);
+    }
+  });
+
+  it('places the full requested target count at low/mid levels', () => {
+    // With plenty of room and the per-line gap constraint, low/mid levels always
+    // reach the requested count.
+    for (const lvl of [1, 2, 3, 5, 8, 10]) {
+      expect(count(generateLevel(lvl).targets)).toBe(targetCountForLevel(lvl));
+    }
+  });
+
+  it('still fills close to the cap at high levels (guards against silent under-fill)', () => {
+    // At high levels `want` saturates the 28 cap; generation must not quietly
+    // under-fill and let difficulty plateau. Floor at ~half the requested count.
+    for (const lvl of [20, 60, 999]) {
+      const want = targetCountForLevel(lvl);
+      const placed = count(generateLevel(lvl).targets);
+      expect(placed).toBeLessThanOrEqual(28);
+      expect(placed).toBeGreaterThanOrEqual(Math.ceil(want / 2));
+    }
+  });
 });

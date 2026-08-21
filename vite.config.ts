@@ -24,7 +24,9 @@ export default defineConfig({
   },
   plugins: isTest ? [] : [
     VitePWA({
-      registerType: 'autoUpdate',
+      // Prompt (not autoUpdate): a silent swap could reload mid-game and discard
+      // the in-progress board. main.ts shows a "Refresh" toast on onNeedRefresh.
+      registerType: 'prompt',
       // Exercise the service worker in dev so offline behavior can be validated early.
       devOptions: { enabled: true, type: 'module' },
       // Precache these public assets in addition to the built JS/CSS/HTML.
@@ -52,7 +54,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         cleanupOutdatedCaches: true,
       },
     }),

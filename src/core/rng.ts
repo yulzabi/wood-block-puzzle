@@ -31,6 +31,10 @@ export function seedState(seed: number): number {
  * Advance the generator. Returns the next float in `[0, 1)` and the next state.
  */
 export function nextRandom(state: number): { value: number; state: number } {
+  // mulberry32: `state` is a plain counter. The next state is just this fixed-odd
+  // increment — NOT the folded output mix computed below. Do not "simplify" by
+  // returning the mixed value; that would change every RNG stream (piece deals and
+  // level layouts) and break all determinism-dependent tests.
   let a = toUint32(state + 0x6d2b79f5);
   const next = a;
   a = Math.imul(a ^ (a >>> 15), a | 1);

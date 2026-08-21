@@ -126,7 +126,7 @@ scripts/      # icon generation + Lighthouse runner
 
 **Requires a real device / manual check (can't be automated headlessly):**
 
-- **iOS install** — Safari → Share → *Add to Home Screen*, then confirm standalone launch, status bar, splash, and offline play (needs a Mac + iPhone).
+- **iOS install** — Safari → Share → *Add to Home Screen*, then confirm standalone launch, status bar, and offline play (needs a Mac + iPhone). Note: iOS only shows a custom launch image when it matches the device's exact dimensions via per-size media queries; with the single generic `apple-touch-startup-image` here, most devices simply show the `background_color` on launch rather than the splash art.
 - **On-device install & offline** on Android/desktop — install, go offline (airplane mode / DevTools → Network → Offline), relaunch, and confirm it still plays.
 - **Interactive drag-and-drop feel** — 60fps dragging, valid/invalid preview, snap/return, and haptics on supported hardware. (The *logic* behind drops is unit-tested; the touch interaction itself is a manual check.)
 

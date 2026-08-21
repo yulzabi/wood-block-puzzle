@@ -34,6 +34,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Gate the deploy on types + tests — a broken commit must not ship
+      # (Vite build alone does not type-check).
+      - name: Type check
+        run: npm run typecheck
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
         env:
