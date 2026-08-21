@@ -6,7 +6,10 @@
  *   icon-512.png            512  "any"      rounded plaque
  *   icon-512-maskable.png   512  "maskable" full-bleed, motif inside the safe zone
  *   apple-touch-icon-180.png 180 iOS        full-bleed (iOS applies its own mask)
- *   splash.png              1290x2796       iOS launch image (icon + title on wood)
+ *   splash.png              1290x2796       generic iOS launch image (fallback)
+ *   splash-<w>x<h>.png      per device      iOS launch images at exact device pixel
+ *                                           sizes (iOS only shows a launch image on
+ *                                           an exact device-width/height/DPR match)
  *
  * Run: `npm run icons`
  */
@@ -88,6 +91,25 @@ async function writePng(svg, file) {
   return file;
 }
 
+/**
+ * iOS launch-image sizes as [physicalW, physicalH, dpr]. iOS only shows a launch
+ * image when device-width/height (logical = physical/dpr) and -webkit-device-pixel-
+ * ratio all match, so we emit one PNG per common iPhone at its exact device pixels.
+ * index.html carries the matching media-query <link>s (+ a generic splash.png).
+ * Filenames are splash-<physW>x<physH>.png.
+ */
+export const IOS_SPLASH = [
+  [1290, 2796, 3], // 16/15 Pro Max, 14 Pro Max         (logical 430x932)
+  [1179, 2556, 3], // 16/15, 14 Pro                     (logical 393x852)
+  [1206, 2622, 3], // 16 Pro                            (logical 402x874)
+  [1284, 2778, 3], // 14 Plus, 13/12 Pro Max            (logical 428x926)
+  [1170, 2532, 3], // 14/13/12, 13/12 Pro               (logical 390x844)
+  [1242, 2688, 3], // 11 Pro Max, XS Max                (logical 414x896)
+  [1125, 2436, 3], // 11 Pro, XS, X                     (logical 375x812)
+  [828, 1792, 2],  // 11, XR                            (logical 414x896)
+  [750, 1334, 2],  // SE (2/3), 8, 7, 6s                (logical 375x667)
+];
+
 async function main() {
   await mkdir(OUT, { recursive: true });
   const written = await Promise.all([
@@ -96,6 +118,7 @@ async function main() {
     writePng(iconSVG({ size: 512, rounded: false, safe: 0.5 }), 'icon-512-maskable.png'),
     writePng(iconSVG({ size: 180, rounded: false, safe: 0.6 }), 'apple-touch-icon-180.png'),
     writePng(splashSVG(1290, 2796), 'splash.png'),
+    ...IOS_SPLASH.map(([w, h]) => writePng(splashSVG(w, h), `splash-${w}x${h}.png`)),
   ]);
   console.log(`Generated ${written.length} assets in public/icons/:\n  ${written.join('\n  ')}`);
 }

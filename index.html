@@ -4,13 +4,27 @@
     <meta charset="UTF-8" />
     <title>Wood Block Puzzle</title>
 
-    <!-- Full-viewport, notch-aware, no zoom: native-app feel -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
-    />
+    <!-- Full-viewport, notch-aware. Pinch-zoom is intentionally allowed (WCAG 1.4.4);
+         pinch during play is suppressed by `touch-action: none` on the play surfaces. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#8a5a2b" />
-    <meta name="description" content="A cozy wood-themed block-placement puzzle." />
+    <meta name="description" content="Wood Block Puzzle — a cozy, offline-playable wood-themed block-placement puzzle. Drag pieces to fill rows and columns, build combo streaks, and clear the board across Endless and Levels modes." />
+
+    <!-- SEO / discoverability -->
+    <link rel="canonical" href="https://yulzabi.github.io/wood-block-puzzle/" />
+    <meta name="robots" content="index,follow" />
+
+    <!-- Open Graph / Twitter share cards (absolute URLs required by crawlers) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wood Block Puzzle" />
+    <meta property="og:title" content="Wood Block Puzzle" />
+    <meta property="og:description" content="A cozy, offline-playable wood-themed block-placement puzzle — Endless and Levels modes, combo streaks, installable as an app." />
+    <meta property="og:url" content="https://yulzabi.github.io/wood-block-puzzle/" />
+    <meta property="og:image" content="https://yulzabi.github.io/wood-block-puzzle/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Wood Block Puzzle" />
+    <meta name="twitter:description" content="A cozy, offline-playable wood-themed block-placement puzzle." />
+    <meta name="twitter:image" content="https://yulzabi.github.io/wood-block-puzzle/icons/icon-512.png" />
 
     <!-- iOS standalone / home-screen behavior -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,7 +32,18 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="WoodBlocks" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
-    <!-- iOS launch image (best-effort; iOS shows background_color otherwise) -->
+
+    <!-- iOS launch images. iOS only shows one on an exact device-width/height/DPR
+         match, so each iPhone gets its own; the last (media-less) is a fallback. -->
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1290x2796.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1179x2556.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1206x2622.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1284x2778.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1170x2532.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1242x2688.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/icons/splash-1125x2436.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/icons/splash-828x1792.png" />
+    <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/icons/splash-750x1334.png" />
     <link rel="apple-touch-startup-image" href="/icons/splash.png" />
 
     <link rel="stylesheet" href="/src/styles/theme.css" />

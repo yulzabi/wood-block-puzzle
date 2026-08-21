@@ -27,7 +27,7 @@ export function createScreens(root: HTMLElement): Screens {
 
   const frame = el('div', 'app-frame');
 
-  const home = el('section', 'screen play-surface');
+  const home = el('section', 'screen');
   home.id = 'screen-home';
 
   const game = el('section', 'screen play-surface');
