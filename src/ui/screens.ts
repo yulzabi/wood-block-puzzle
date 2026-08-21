@@ -350,7 +350,11 @@ export function renderSettings(overlay: HTMLElement, opts: SettingsOpts): void {
     current.haptics = on;
     opts.onChange({ ...current });
   });
-  toggles.append(soundBtn, hapticsBtn);
+  const hintsBtn = toggleButton('Hints', current.hints, (on) => {
+    current.hints = on;
+    opts.onChange({ ...current });
+  });
+  toggles.append(soundBtn, hapticsBtn, hintsBtn);
 
   const done = document.createElement('button');
   done.className = 'btn btn--primary';

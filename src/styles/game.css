@@ -17,9 +17,16 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  /* Menu on the left; the Hint button (when present) sits at the right. With
+     only the menu button, space-between still keeps it left-aligned. */
+  justify-content: space-between;
 }
 .game-menu-btn {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 16px;
+}
+.game-hint-btn {
   font-size: 13px;
   font-weight: 700;
   padding: 7px 16px;

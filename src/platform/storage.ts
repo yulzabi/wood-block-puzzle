@@ -78,15 +78,23 @@ export function saveLevelProgress(level: number): void {
   }
 }
 
-/** User settings (audio + haptics toggles). */
+/** User settings (audio + haptics + placement-hints toggles). */
 export interface Settings {
   sound: boolean;
   haptics: boolean;
+  /** Placement hints (the in-game "Hint" button). Defaults OFF. */
+  hints: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true };
+/** Sound/haptics default ON; hints default OFF (opt-in assist). */
+const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, hints: false };
 
-/** Load settings. Both toggles default to true; corrupt/missing/unavailable → defaults. */
+/**
+ * Load settings. Each field falls back to its default independently, so an
+ * older stored blob missing a newer key (e.g. `hints`) loads cleanly with that
+ * key defaulted rather than wiping the others. Corrupt/missing/unavailable →
+ * all defaults.
+ */
 export function loadSettings(): Settings {
   const storage = getStorage();
   if (!storage) return { ...DEFAULT_SETTINGS };
@@ -99,6 +107,7 @@ export function loadSettings(): Settings {
     return {
       sound: typeof obj['sound'] === 'boolean' ? obj['sound'] : DEFAULT_SETTINGS.sound,
       haptics: typeof obj['haptics'] === 'boolean' ? obj['haptics'] : DEFAULT_SETTINGS.haptics,
+      hints: typeof obj['hints'] === 'boolean' ? obj['hints'] : DEFAULT_SETTINGS.hints,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -112,7 +121,11 @@ export function saveSettings(settings: Settings): void {
   try {
     storage.setItem(
       SETTINGS_KEY,
-      JSON.stringify({ sound: !!settings.sound, haptics: !!settings.haptics }),
+      JSON.stringify({
+        sound: !!settings.sound,
+        haptics: !!settings.haptics,
+        hints: !!settings.hints,
+      }),
     );
   } catch {
     // Quota exceeded / disabled — silently ignore.

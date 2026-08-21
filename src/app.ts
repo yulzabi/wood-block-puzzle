@@ -20,7 +20,7 @@ import {
   retryLevel,
   startGame,
 } from './core/game';
-import { canPlace, linesCompletedBy } from './core/board';
+import { canPlace, firstPlacement, linesCompletedBy } from './core/board';
 import {
   loadHighScore,
   saveHighScore,
@@ -70,6 +70,9 @@ export class App {
   private readonly installAffordance: InstallAffordance | null;
   private readonly live: HTMLElement;
   private readonly particles: Particles;
+  /** In-game top bar + hint button (the button is added/removed by settings). */
+  private readonly topBar: HTMLElement;
+  private readonly hintBtn: HTMLButtonElement;
   private settings: Settings;
   private stats: Stats;
   private state: GameState;
@@ -117,6 +120,17 @@ export class App {
     menuBtn.textContent = '← Menu';
     menuBtn.addEventListener('click', () => this.confirmQuit());
     topBar.append(menuBtn);
+    this.topBar = topBar;
+
+    // The "Hint" button is only present in the DOM when hints are enabled
+    // (opt-in assist, off by default). syncHintButton() adds/removes it.
+    this.hintBtn = document.createElement('button');
+    this.hintBtn.className = 'btn btn--ghost game-hint-btn';
+    this.hintBtn.type = 'button';
+    this.hintBtn.setAttribute('aria-label', 'Show a placement hint');
+    this.hintBtn.textContent = '💡 Hint';
+    this.hintBtn.addEventListener('click', () => this.showHint());
+
     const hudEl = document.createElement('div');
     const boardWrap = document.createElement('div');
     boardWrap.className = 'board-wrap';
@@ -149,6 +163,7 @@ export class App {
       announce: (msg) => this.announce(msg),
     });
     this.keyboard.attach();
+    this.syncHintButton();
 
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
@@ -197,6 +212,40 @@ export class App {
     saveSettings(next);
     setSoundEnabled(next.sound);
     setHapticsEnabled(next.haptics);
+    this.syncHintButton();
+  }
+
+  /** Add or remove the in-game Hint button to match the hints setting. */
+  private syncHintButton(): void {
+    if (this.settings.hints) {
+      if (!this.hintBtn.isConnected) this.topBar.append(this.hintBtn);
+    } else {
+      this.hintBtn.remove();
+    }
+  }
+
+  /**
+   * Highlight a legal placement for the first unplaced tray piece that fits
+   * anywhere (falling through pieces that don't fit), reusing the valid-drop
+   * preview. Announces the coordinate for screen-reader users, or "No moves"
+   * when nothing fits. Clears any stale preview / line-hint first so the board
+   * shows exactly one highlight — the hint.
+   */
+  private showHint(): void {
+    if (this.state.status !== 'playing') return;
+    this.boardView.clearPreview();
+    this.boardView.clearLineHint();
+
+    for (const piece of this.state.tray) {
+      if (piece.placed) continue;
+      const at = firstPlacement(this.state.board, piece.shape);
+      if (!at) continue;
+      const cells = piece.shape.cells.map((c) => ({ row: at.row + c.row, col: at.col + c.col }));
+      this.boardView.showPreview(cells, true);
+      this.announce(`Hint: row ${at.row + 1}, column ${at.col + 1}`);
+      return;
+    }
+    this.announce('No moves available.');
   }
 
   private showStats(): void {
@@ -247,6 +296,7 @@ export class App {
   private enterGame(): void {
     this.hud.reset();
     this.renderAll();
+    this.syncHintButton();
     this.screens.show('game');
     this.setInteractive(true);
     if (this.state.mode === 'levels') {

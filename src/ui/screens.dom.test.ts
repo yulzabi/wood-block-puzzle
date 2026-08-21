@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createScreens, renderConfirm, renderGameOver } from './screens';
+import { createScreens, renderConfirm, renderGameOver, renderSettings } from './screens';
 
 function buttonByText(root: HTMLElement, text: string): HTMLButtonElement {
   const btn = Array.from(root.querySelectorAll('button')).find((b) => b.textContent === text);
@@ -87,5 +87,23 @@ describe('screens (DOM)', () => {
 
     buttonByText(s.overlay, 'Quit').click();
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+
+  it('renderSettings shows a Hints toggle reflecting the current (off) state', () => {
+    const s = createScreens(root);
+    const onChange = vi.fn();
+    renderSettings(s.overlay, {
+      settings: { sound: true, haptics: true, hints: false },
+      onChange,
+      onClose: vi.fn(),
+    });
+
+    const hints = buttonByText(s.overlay, 'Hints: Off');
+    expect(hints.getAttribute('aria-pressed')).toBe('false');
+
+    // Toggling on reports the new settings with hints flipped, others intact.
+    hints.click();
+    expect(onChange).toHaveBeenCalledWith({ sound: true, haptics: true, hints: true });
+    expect(hints.getAttribute('aria-pressed')).toBe('true');
   });
 });
