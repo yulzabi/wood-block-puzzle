@@ -36,6 +36,12 @@ export interface Piece {
   readonly shape: Shape;
   readonly material: number; // 1..MATERIAL_COUNT wood-tone index
   readonly placed: boolean;
+  /**
+   * Gems riding on some of this piece's shape cells (Levels gems goal). Maps a
+   * shape-cell index (into `shape.cells`) to a gem color; absent = no gems.
+   * Inert until piece-borne gems land; undefined for every ordinary piece.
+   */
+  readonly gems?: Readonly<Record<number, number>>;
 }
 
 /**
@@ -48,6 +54,16 @@ export type Screen = 'home' | 'playing' | 'gameover';
 
 /** Which game mode a session is running. */
 export type GameMode = 'endless' | 'levels';
+
+/**
+ * A Levels session's win condition — reach a target score, or clear a per-color
+ * quota of gems. Never both (either/or). Endless has no win condition and
+ * carries 'score' inertly.
+ */
+export type GoalType = 'gems' | 'score';
+
+/** Per-color gem counts, keyed by color index (1..MATERIAL_COUNT). */
+export type GemCounts = Readonly<Record<number, number>>;
 
 /**
  * Full lifecycle status of a session. Endless uses home/playing/gameover;
@@ -67,11 +83,14 @@ export interface GameState {
 
   // --- Mode ---
   readonly mode: GameMode;
-  // Levels mode fields (0 / empty mask for endless):
+  // Levels-mode fields (inert for endless: goalType 'score', 0 score, empty gems/counts).
   readonly level: number; // current level number (0 in endless)
-  readonly targetScore: number; // score needed to clear the level (0 in endless)
-  readonly targets: Uint8Array; // length 64 mask, 1 = a target block still to clear
-  readonly targetsTotal: number; // initial target count (for HUD progress)
+  readonly goalType: GoalType; // win condition: reach a score, or clear gem quotas
+  readonly targetScore: number; // score needed (score goal); 0 otherwise
+  readonly gems: Uint8Array; // length 64; 0 = none, >0 = gem color still on the board
+  readonly quotas: GemCounts; // per-color gems the level requires cleared (gems goal)
+  readonly gemsCleared: GemCounts; // per-color gems cleared so far
+  readonly gemSupplyRemaining: GemCounts; // per-color gems not yet dealt (generation invariant)
 }
 
 /** The only mutation the engine accepts. */

@@ -41,10 +41,10 @@ describe('BoardView (DOM)', () => {
 
   it('marks target cells and labels them "target block"', () => {
     const board = createBoard();
-    const targets = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+    const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
     board[5] = 2;
-    targets[5] = 1;
-    view.renderBoard(board, targets);
+    gems[5] = 1;
+    view.renderBoard(board, gems);
 
     const c5 = cells()[5]!;
     expect(c5.classList.contains('target')).toBe(true);

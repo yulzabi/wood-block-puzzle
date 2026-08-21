@@ -34,9 +34,12 @@ export function newGame(seed: number, highScore: number): GameState {
     streak: 0,
     mode: 'endless',
     level: 0,
+    goalType: 'score',
     targetScore: 0,
-    targets: createBoard(),
-    targetsTotal: 0,
+    gems: createBoard(),
+    quotas: {},
+    gemsCleared: {},
+    gemSupplyRemaining: {},
   };
 }
 
@@ -54,9 +57,12 @@ function beginPlaying(state: GameState): GameState {
     streak: 0,
     mode: 'endless',
     level: 0,
+    goalType: 'score',
     targetScore: 0,
-    targets: createBoard(),
-    targetsTotal: 0,
+    gems: createBoard(),
+    quotas: {},
+    gemsCleared: {},
+    gemSupplyRemaining: {},
   };
 }
 
@@ -75,9 +81,12 @@ function beginLevel(state: GameState, level: number): GameState {
     streak: 0,
     mode: 'levels',
     level,
+    goalType: gen.goalType,
     targetScore: gen.targetScore,
-    targets: gen.targets,
-    targetsTotal: countMask(gen.targets),
+    gems: gen.gems,
+    quotas: gen.quotas,
+    gemsCleared: {},
+    gemSupplyRemaining: gen.gemSupplyRemaining,
   };
 }
 
@@ -190,10 +199,10 @@ export function applyMove(state: GameState, move: Move): MoveResult {
   // 6. High score.
   const highScore = Math.max(state.highScore, score);
 
-  // 7. Update the target mask: any cleared cell that was a target is now gone.
-  const targets = state.targets.slice();
-  for (const c of clearedCells) targets[idx(c.row, c.col)] = 0;
-  const targetsRemaining = countMask(targets);
+  // 7. Update the gem channel: any cleared cell that held a gem is now gone.
+  const gems = state.gems.slice();
+  for (const c of clearedCells) gems[idx(c.row, c.col)] = 0;
+  const gemsRemaining = countMask(gems);
 
   // 8. Resolve end-of-move status per mode (against the post-refill tray).
   const unplaced = tray.filter((p) => !p.placed);
@@ -201,8 +210,9 @@ export function applyMove(state: GameState, move: Move): MoveResult {
 
   let status: GameStatus = 'playing';
   if (state.mode === 'levels') {
-    // Winning (targets cleared AND score reached) takes precedence over a dead-end.
-    if (targetsRemaining === 0 && score >= state.targetScore) {
+    // Winning (gems cleared AND score reached) takes precedence over a dead-end.
+    // (P3: this combined condition splits into either-gems-or-score in a later slice.)
+    if (gemsRemaining === 0 && score >= state.targetScore) {
       status = 'levelcomplete';
       events.push({ type: 'levelcomplete', level: state.level, score });
     } else if (deadEnd) {
@@ -227,9 +237,12 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       streak,
       mode: state.mode,
       level: state.level,
+      goalType: state.goalType,
       targetScore: state.targetScore,
-      targets,
-      targetsTotal: state.targetsTotal,
+      gems,
+      quotas: state.quotas,
+      gemsCleared: state.gemsCleared,
+      gemSupplyRemaining: state.gemSupplyRemaining,
     },
     events,
   };

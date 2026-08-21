@@ -43,18 +43,29 @@ function playing(
     streak,
     mode: 'endless',
     level: 0,
+    goalType: 'score',
     targetScore: 0,
-    targets: createBoard(),
-    targetsTotal: 0,
+    gems: createBoard(),
+    quotas: {},
+    gemsCleared: {},
+    gemSupplyRemaining: {},
   };
 }
 
 const maskCount = (a: Uint8Array): number => a.reduce((n, v) => n + (v ? 1 : 0), 0);
+const sumCounts = (c: Readonly<Record<number, number>>): number =>
+  Object.values(c).reduce((n, v) => n + v, 0);
+/** Per-color counts of the gems in a channel (mirrors generateLevel's quotas). */
+function quotasFromMask(gems: Uint8Array): Record<number, number> {
+  const q: Record<number, number> = {};
+  for (const v of gems) if (v !== 0) q[v] = (q[v] ?? 0) + 1;
+  return q;
+}
 
 /** Build a Levels-mode 'playing' state for engine tests. */
 function levelsState(opts: {
   board: Uint8Array;
-  targets: Uint8Array;
+  gems: Uint8Array;
   tray: Piece[];
   score?: number;
   targetScore?: number;
@@ -72,9 +83,12 @@ function levelsState(opts: {
     streak: 0,
     mode: 'levels',
     level: opts.level ?? 1,
+    goalType: 'score',
     targetScore: opts.targetScore ?? 100,
-    targets: opts.targets,
-    targetsTotal: maskCount(opts.targets),
+    gems: opts.gems,
+    quotas: quotasFromMask(opts.gems),
+    gemsCleared: {},
+    gemSupplyRemaining: {},
   };
 }
 
@@ -242,9 +256,12 @@ describe('restart', () => {
       streak: 0,
       mode: 'endless',
       level: 0,
+      goalType: 'score',
       targetScore: 0,
-      targets: createBoard(),
-      targetsTotal: 0,
+      gems: createBoard(),
+      quotas: {},
+      gemsCleared: {},
+      gemSupplyRemaining: {},
     };
 
     const res = restart(state);
@@ -260,7 +277,7 @@ describe('restart', () => {
 });
 
 describe('levels — start / progression', () => {
-  it('newLevelsGame starts a playing level with targets and a target score', () => {
+  it('newLevelsGame starts a playing level with gems and a target score', () => {
     const g = newLevelsGame(1, 7, 25);
     expect(g.mode).toBe('levels');
     expect(g.status).toBe('playing');
@@ -269,8 +286,9 @@ describe('levels — start / progression', () => {
     expect(g.score).toBe(0);
     expect(g.highScore).toBe(25);
     expect(g.targetScore).toBeGreaterThan(0);
-    expect(g.targetsTotal).toBeGreaterThan(0);
-    expect(maskCount(g.targets)).toBe(g.targetsTotal);
+    expect(sumCounts(g.quotas)).toBeGreaterThan(0);
+    // Every gem on the board is counted in the per-color quota totals.
+    expect(maskCount(g.gems)).toBe(sumCounts(g.quotas));
   });
 
   it('nextLevel advances and retryLevel rebuilds the same level (board matches generateLevel)', () => {
@@ -288,53 +306,53 @@ describe('levels — start / progression', () => {
 });
 
 describe('levels — applyMove resolution', () => {
-  it('clearing a line removes its target cells and does not mutate the input mask', () => {
+  it('clearing a line removes its gem cells and does not mutate the input channel', () => {
     const board = createBoard();
     for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
-    const targets = createBoard();
-    targets[idx(0, 1)] = 1;
-    targets[idx(0, 2)] = 1;
+    const gems = createBoard();
+    gems[idx(0, 1)] = 1;
+    gems[idx(0, 2)] = 1;
     const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, targets, tray, score: 0, targetScore: 9999 });
+    const state = levelsState({ board, gems, tray, score: 0, targetScore: 9999 });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
     expect(res.ok).toBe(true);
     expect(types(res.events)).toContain('cleared');
-    expect(maskCount(res.state.targets)).toBe(0);
-    expect(res.state.status).toBe('playing'); // targets gone but score < targetScore
-    // input mask untouched
-    expect(state.targets[idx(0, 1)]).toBe(1);
+    expect(maskCount(res.state.gems)).toBe(0);
+    expect(res.state.status).toBe('playing'); // gems gone but score < targetScore
+    // input channel untouched
+    expect(state.gems[idx(0, 1)]).toBe(1);
   });
 
-  it('stays playing when the score is reached but targets remain', () => {
+  it('stays playing when the score is reached but gems remain', () => {
     const board = createBoard();
-    const targets = createBoard();
+    const gems = createBoard();
     board[idx(5, 5)] = 2;
-    targets[idx(5, 5)] = 1; // an isolated target we will NOT clear
+    gems[idx(5, 5)] = 1; // an isolated gem we will NOT clear
     const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, targets, tray, score: 100, targetScore: 10 });
+    const state = levelsState({ board, gems, tray, score: 100, targetScore: 10 });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
     expect(res.state.status).toBe('playing');
     expect(res.state.score).toBeGreaterThanOrEqual(10);
-    expect(maskCount(res.state.targets)).toBe(1);
+    expect(maskCount(res.state.gems)).toBe(1);
   });
 
-  it('completes the level only when BOTH targets are cleared and the score is reached', () => {
+  it('completes the level only when BOTH gems are cleared and the score is reached', () => {
     const board = createBoard();
     for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1;
-    const targets = createBoard();
-    targets[idx(0, 3)] = 1;
+    const gems = createBoard();
+    gems[idx(0, 3)] = 1;
     const tray = [piece('s', single, 4), piece('z', square2, 5)];
-    const state = levelsState({ board, targets, tray, score: 0, targetScore: 10, level: 2 });
+    const state = levelsState({ board, gems, tray, score: 0, targetScore: 10, level: 2 });
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
-    // placement (+1) + row clear (+10) = 11 >= 10, and the only target was in row 0
+    // placement (+1) + row clear (+10) = 11 >= 10, and the only gem was in row 0
     expect(res.state.score).toBe(11);
-    expect(maskCount(res.state.targets)).toBe(0);
+    expect(maskCount(res.state.gems)).toBe(0);
     expect(res.state.status).toBe('levelcomplete');
     expect(types(res.events)).toContain('levelcomplete');
     expect(res.events.find((e) => e.type === 'levelcomplete')).toMatchObject({ level: 2, score: 11 });
@@ -342,16 +360,16 @@ describe('levels — applyMove resolution', () => {
 
   it('fails the level on a dead-end that is not yet complete', () => {
     // Circulant near-dead board (2 non-adjacent empties per row/col): no line is
-    // full and no vertical-3 fits. One target sits on a filled cell.
+    // full and no vertical-3 fits. One gem sits on a filled cell.
     const board = new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
     for (let r = 0; r < BOARD_SIZE; r++) {
       board[idx(r, r)] = 0;
       board[idx(r, (r + 1) % BOARD_SIZE)] = 0;
     }
-    const targets = createBoard();
-    targets[idx(0, 2)] = 1; // (0,2) is filled
+    const gems = createBoard();
+    gems[idx(0, 2)] = 1; // (0,2) is filled
     const tray = [piece('a', single), piece('b', line3v)];
-    const state = levelsState({ board, targets, tray, score: 0, targetScore: 9999, level: 3 });
+    const state = levelsState({ board, gems, tray, score: 0, targetScore: 9999, level: 3 });
 
     const res = applyMove(state, { type: 'place', pieceId: 'a', at: { row: 0, col: 0 } });
 
@@ -440,8 +458,8 @@ describe('applyMove — a refill can immediately end the game', () => {
   });
 
   it('levels: an unplaceable refill fails the level', () => {
-    const targets = createBoard();
-    targets[idx(2, 2)] = 1; // a target on a filled cell -> survives, so not complete
+    const gems = createBoard();
+    gems[idx(2, 2)] = 1; // a gem on a filled cell -> survives, so not complete
     const tray = [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)];
     const state: GameState = {
       board: isolatedBoard(),
@@ -454,9 +472,12 @@ describe('applyMove — a refill can immediately end the game', () => {
       streak: 0,
       mode: 'levels',
       level: 4,
+      goalType: 'score',
       targetScore: 9999,
-      targets,
-      targetsTotal: 1,
+      gems,
+      quotas: { 1: 1 },
+      gemsCleared: {},
+      gemSupplyRemaining: {},
     };
 
     const res = applyMove(state, { type: 'place', pieceId: 'c', at: { row: 0, col: 0 } });

@@ -301,7 +301,7 @@ export class App {
     this.setInteractive(true);
     if (this.state.mode === 'levels') {
       this.announce(
-        `Level ${this.state.level}. Clear ${this.state.targetsTotal} blocks and reach ${this.state.targetScore} points.`,
+        `Level ${this.state.level}. Clear ${this.gemTotal()} blocks and reach ${this.state.targetScore} points.`,
       );
     } else {
       this.announce('Endless mode. Place pieces to clear lines.');
@@ -322,7 +322,7 @@ export class App {
   private renderAll(): void {
     this.boardView.renderBoard(
       this.state.board,
-      this.state.mode === 'levels' ? this.state.targets : undefined,
+      this.state.mode === 'levels' ? this.state.gems : undefined,
     );
     this.trayView.renderTray(this.state.tray);
     this.renderHud();
@@ -335,19 +335,26 @@ export class App {
         this.state.level,
         this.state.score,
         this.state.targetScore,
-        this.targetsLeft(),
-        this.state.targetsTotal,
+        this.gemsLeft(),
+        this.gemTotal(),
       );
     } else {
       this.hud.render(this.state.score, this.state.highScore);
     }
   }
 
-  /** Count of target blocks still on the board (Levels mode). */
-  private targetsLeft(): number {
-    const t = this.state.targets;
+  /** Count of gem blocks still on the board (Levels mode). */
+  private gemsLeft(): number {
+    const g = this.state.gems;
     let n = 0;
-    for (let i = 0; i < t.length; i++) if (t[i] !== 0) n++;
+    for (let i = 0; i < g.length; i++) if (g[i] !== 0) n++;
+    return n;
+  }
+
+  /** Total gems the current level requires (the HUD progress denominator). */
+  private gemTotal(): number {
+    let n = 0;
+    for (const c of Object.values(this.state.quotas)) n += c;
     return n;
   }
 
@@ -363,7 +370,7 @@ export class App {
     // Reflect the new board/tray truth first, then animate the events.
     this.boardView.renderBoard(
       this.state.board,
-      this.state.mode === 'levels' ? this.state.targets : undefined,
+      this.state.mode === 'levels' ? this.state.gems : undefined,
     );
     this.trayView.renderTray(this.state.tray);
 

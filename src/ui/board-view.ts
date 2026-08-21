@@ -85,10 +85,11 @@ export class BoardView {
 
   /**
    * Reconcile every cell to empty or a wood-tone block by material index.
-   * In Levels mode a `targets` mask (1 = a block that must still be cleared) marks
-   * those cells as "target" so they read as goal blockers; endless passes nothing.
+   * In Levels mode a `gems` channel (>0 = a gem block that must still be cleared)
+   * marks those cells as goal blockers; endless passes nothing. (Per-color gem
+   * visuals arrive in a later slice; for now the marker is the goal ring.)
    */
-  renderBoard(board: Board, targets?: Uint8Array): void {
+  renderBoard(board: Board, gems?: Uint8Array): void {
     for (let i = 0; i < this.cells.length; i++) {
       const cell = this.cells[i];
       if (!cell) continue;
@@ -100,7 +101,7 @@ export class BoardView {
         cell.classList.remove('filled');
         cell.style.removeProperty('--block');
       }
-      const isTarget = !!targets && (targets[i] ?? 0) !== 0;
+      const isTarget = !!gems && (gems[i] ?? 0) !== 0;
       cell.classList.toggle('target', isTarget);
 
       const row = Math.floor(i / BOARD_SIZE);
