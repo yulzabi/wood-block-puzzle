@@ -31,6 +31,10 @@ export interface DragConfig {
   getPieces(): readonly Piece[];
   /** Whether a shape may be placed at an origin on the current board. */
   canPlaceAt(shape: Shape, at: Coord): boolean;
+  /** Rows/cols a valid placement would complete (for the line-completion hint). */
+  linesCompletedAt(shape: Shape, at: Coord): { rows: number[]; cols: number[] };
+  /** Optional screen-reader announcement (e.g. "Placing here clears 2 lines"). */
+  announce?(message: string): void;
   /** Called with a valid placement Move on drop. */
   onPlace(move: Move): void;
 }
@@ -205,14 +209,24 @@ export class DragController {
       if (key !== this.lastKey) {
         this.lastKey = key;
         this.cfg.boardView.showPreview(absCells(s.piece.shape, origin), valid);
+        // Line-completion hint (computed only on cell/validity change).
+        if (valid) {
+          const lines = this.cfg.linesCompletedAt(s.piece.shape, origin);
+          this.cfg.boardView.showLineHint(lines.rows, lines.cols);
+          const n = lines.rows.length + lines.cols.length;
+          if (n > 0) this.cfg.announce?.(`Placing here clears ${n} line${n > 1 ? 's' : ''}`);
+        } else {
+          this.cfg.boardView.clearLineHint();
+        }
       }
     } else {
       s.origin = null;
       s.valid = false;
-      // Clear the highlight once on the transition off-grid (ghost keeps floating).
+      // Clear the highlights once on the transition off-grid (ghost keeps floating).
       if (this.lastKey !== 'off') {
         this.lastKey = 'off';
         this.cfg.boardView.clearPreview();
+        this.cfg.boardView.clearLineHint();
       }
     }
   }
@@ -268,6 +282,7 @@ export class DragController {
     }
 
     this.cfg.boardView.clearPreview();
+    this.cfg.boardView.clearLineHint();
 
     const source = this.cfg.trayEl.querySelector<HTMLElement>(
       `.tray-piece[data-piece-id="${s.piece.id}"]`,

@@ -47,6 +47,8 @@ export class BoardView {
   readonly el: HTMLElement;
   private readonly cells: HTMLElement[] = [];
   private previewed: HTMLElement[] = [];
+  /** Cells currently glowing with the line-completion hint. */
+  private lineHinted: HTMLElement[] = [];
   /** Cached grid geometry; null = must re-measure. See metrics(). */
   private cachedMetrics: GridMetrics | null = null;
 
@@ -126,6 +128,24 @@ export class BoardView {
       cell.classList.remove('preview', 'preview--valid', 'preview--invalid');
     }
     this.previewed = [];
+  }
+
+  /** Glow the full rows/cols a valid drop would complete (line-completion hint). */
+  showLineHint(rows: readonly number[], cols: readonly number[]): void {
+    this.clearLineHint();
+    const mark = (i: number): void => {
+      const cell = this.cells[i];
+      if (!cell) return;
+      cell.classList.add('line-hint');
+      this.lineHinted.push(cell);
+    };
+    for (const row of rows) for (let col = 0; col < BOARD_SIZE; col++) mark(idx(row, col));
+    for (const col of cols) for (let row = 0; row < BOARD_SIZE; row++) mark(idx(row, col));
+  }
+
+  clearLineHint(): void {
+    for (const cell of this.lineHinted) cell.classList.remove('line-hint');
+    this.lineHinted = [];
   }
 
   /** Brief pop on freshly placed cells (real polish handled by a later pass). */

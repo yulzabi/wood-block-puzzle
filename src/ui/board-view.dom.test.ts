@@ -104,4 +104,17 @@ describe('BoardView (DOM)', () => {
       spy.mockRestore();
     }
   });
+
+  it('showLineHint glows every cell of the given rows/cols; clearLineHint removes it', () => {
+    view.showLineHint([0], [0]);
+    const cs = cells();
+    for (let col = 0; col < BOARD_SIZE; col++) {
+      expect(cs[col]!.classList.contains('line-hint')).toBe(true); // row 0
+    }
+    for (let row = 0; row < BOARD_SIZE; row++) {
+      expect(cs[row * BOARD_SIZE]!.classList.contains('line-hint')).toBe(true); // col 0
+    }
+    view.clearLineHint();
+    expect(cs.some((c) => c.classList.contains('line-hint'))).toBe(false);
+  });
 });

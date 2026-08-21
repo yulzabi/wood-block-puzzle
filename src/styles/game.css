@@ -177,6 +177,15 @@
   );
 }
 
+/* Line-completion hint: the full row/col a valid drop would clear glows warm.
+   Static (no animation) so it is inherently reduced-motion-safe, and distinct
+   from the piece preview (which tints the landing cells green/red). */
+.cell.line-hint {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 216, 148, 0.9),
+    0 0 9px 1px rgba(255, 190, 110, 0.5);
+}
+
 .cell.just-placed {
   animation: cell-pop 0.22s ease-out;
 }
