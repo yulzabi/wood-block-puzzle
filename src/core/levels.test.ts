@@ -84,6 +84,15 @@ describe('generateLevel — gem goal (level 2+)', () => {
     expect(Array.from(generateLevel(2).board)).not.toEqual(Array.from(generateLevel(3).board));
   });
 
+  it('introduces colorblind-distinguishable colors first (blue, then amber, then red)', () => {
+    // A single-color level leads with blue (2) — not the red/green pair that
+    // red-green color blindness confuses.
+    expect(Object.keys(generateLevel(2).quotas)).toEqual(['2']);
+    // A three-color level uses the first three of the order: blue, amber, red.
+    const threeColor = new Set(Object.keys(generateLevel(8).quotas).map(Number));
+    expect(threeColor).toEqual(new Set([2, 4, 1]));
+  });
+
   it('sets a positive per-color quota and starts with fewer board gems than the quota', () => {
     for (const lvl of GEM_LEVELS) {
       const { gems, quotas } = generateLevel(lvl);

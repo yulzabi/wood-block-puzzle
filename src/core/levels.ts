@@ -27,6 +27,14 @@ const MAX_PER_LINE = BOARD_SIZE - 1;
 export const GEM_MARGIN = 2;
 /** Cap on distinct gem colors per level (keeps the per-color HUD readable). */
 const MAX_GEM_COLORS = 3;
+/**
+ * Order in which gem colors are introduced as levels add colors (indices into
+ * the --gem-N palette). Chosen so the earliest, most-common levels lead with the
+ * most distinguishable hues — blue, then amber, then red — rather than the
+ * red/green pair that red-green color blindness confuses. (Gems no longer carry
+ * a letter cue, so color choice carries the whole distinction.)
+ */
+const GEM_COLOR_ORDER: readonly number[] = [2, 4, 1, 6, 5, 3];
 
 /** The win condition for a Levels session: score race (level 1) or gem quota (2+). */
 export function goalTypeForLevel(level: number): GoalType {
@@ -89,9 +97,7 @@ export function targetScoreForLevel(level: number): number {
  *   carry a color (`gems[i] === board[i]`). No full row/column is ever
  *   pre-filled (capped at BOARD_SIZE-1 per line), so nothing clears on load.
  *
- * NOTE: This slice produces the plan only — gems are not yet spawned onto tray
- * pieces, and the win condition still uses the pre-split combined check until
- * the engine slice lands.
+ * Colors are introduced in GEM_COLOR_ORDER (distinguishable hues first).
  */
 export function generateLevel(level: number): {
   board: Board;
@@ -113,21 +119,19 @@ export function generateLevel(level: number): {
   // --- Gem goal (level 2+) ---
   const totalQuota = gemCountForLevel(level);
   const numColors = Math.min(MAX_GEM_COLORS, Math.max(1, 1 + Math.floor((level - 2) / 3)));
+  const colors = GEM_COLOR_ORDER.slice(0, numColors);
 
-  // Per-color quota: distribute the total as evenly as possible (colors 1..N).
+  // Per-color quota: distribute the total as evenly as possible across `colors`.
   const quotas: Record<number, number> = {};
   const base = Math.floor(totalQuota / numColors);
   const extra = totalQuota % numColors;
-  for (let c = 1; c <= numColors; c++) quotas[c] = base + (c <= extra ? 1 : 0);
+  colors.forEach((color, k) => {
+    quotas[color] = base + (k < extra ? 1 : 0);
+  });
 
   // Start with ~half of each color's quota on the board; the rest is supply.
-  const toPlace: Record<number, number> = {};
-  let startBudget = 0;
-  for (let c = 1; c <= numColors; c++) {
-    const share = Math.floor((quotas[c] ?? 0) / 2);
-    toPlace[c] = share;
-    startBudget += share;
-  }
+  const toPlace = colors.map((color) => ({ color, remaining: Math.floor((quotas[color] ?? 0) / 2) }));
+  const startBudget = toPlace.reduce((n, t) => n + t.remaining, 0);
 
   const rowCount = new Uint8Array(BOARD_SIZE);
   const colCount = new Uint8Array(BOARD_SIZE);
@@ -135,7 +139,7 @@ export function generateLevel(level: number): {
   let placed = 0;
   let attempts = 0;
   const maxAttempts = CELL_COUNT * 40;
-  let color = 1; // fill colors in order; advance when a color's board share is met
+  let ci = 0; // fill colors in order; advance when a color's board share is met
 
   while (placed < startBudget && attempts < maxAttempts) {
     attempts++;
@@ -149,9 +153,11 @@ export function generateLevel(level: number): {
       continue; // keep a gap in every row/column
     }
 
-    while (color <= numColors && (toPlace[color] ?? 0) <= 0) color++;
-    if (color > numColors) break; // every color's board share is placed
-    toPlace[color] = (toPlace[color] ?? 0) - 1;
+    while (ci < toPlace.length && (toPlace[ci]?.remaining ?? 0) <= 0) ci++;
+    const slot = toPlace[ci];
+    if (!slot) break; // every color's board share is placed
+    slot.remaining -= 1;
+    const color = slot.color;
 
     board[i] = color;
     gems[i] = color; // the gem rides the pre-filled block, carrying its color
