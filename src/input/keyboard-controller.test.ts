@@ -3,6 +3,7 @@ import { KeyboardController, clampOrigin, type KeyboardConfig } from './keyboard
 import { SHAPES } from '../core/shapes';
 import type { BoardView } from '../ui/board-view';
 import type { Move, Piece, Shape } from '../core/types';
+import type { CompletedLines } from './line-hint';
 
 function byId(id: string): Shape {
   const s = SHAPES.find((x) => x.id === id);
@@ -64,17 +65,31 @@ interface Handlers {
   onDocKey(e: KeyboardEvent): void;
 }
 
-function setup() {
+function setup(
+  opts: {
+    canPlaceAt?: () => boolean;
+    linesCompletedAt?: () => CompletedLines;
+  } = {},
+) {
   const piece: Piece = { id: 'p1', shape: byId('single'), material: 1, placed: false };
   const onPlace = vi.fn<(m: Move) => void>();
-  const boardView = { showPreview: () => {}, clearPreview: () => {} } as unknown as BoardView;
+  const showLineHint = vi.fn<(rows: readonly number[], cols: readonly number[]) => void>();
+  const clearLineHint = vi.fn<() => void>();
+  const announce = vi.fn<(m: string) => void>();
+  const boardView = {
+    showPreview: () => {},
+    clearPreview: () => {},
+    showLineHint,
+    clearLineHint,
+  } as unknown as BoardView;
   const cfg: KeyboardConfig = {
     trayEl: {} as unknown as HTMLElement,
     boardView,
     getPieces: () => [piece],
-    canPlaceAt: () => true,
+    canPlaceAt: opts.canPlaceAt ?? (() => true),
+    linesCompletedAt: opts.linesCompletedAt ?? (() => ({ rows: [], cols: [] })),
     onPlace,
-    announce: () => {},
+    announce,
   };
   const kc = new KeyboardController(cfg);
   const h = kc as unknown as Handlers;
@@ -83,7 +98,7 @@ function setup() {
     h.onTrayKey(ev as unknown as KeyboardEvent);
     if (!ev.stopped) h.onDocKey(ev as unknown as KeyboardEvent);
   };
-  return { piece, onPlace, dispatch };
+  return { piece, onPlace, showLineHint, clearLineHint, announce, dispatch };
 }
 
 describe('KeyboardController pickup/drop', () => {
@@ -113,5 +128,35 @@ describe('KeyboardController pickup/drop', () => {
     dispatch(makeEvent('Escape', el));
     dispatch(makeEvent('ArrowDown', el)); // no longer holding -> ignored
     expect(onPlace).not.toHaveBeenCalled();
+  });
+});
+
+describe('KeyboardController line-completion hint', () => {
+  it('glows the completed line and folds "clears N lines" into one move announcement', () => {
+    const { showLineHint, announce, dispatch } = setup({
+      linesCompletedAt: () => ({ rows: [3], cols: [] }),
+    });
+    const el = makePieceEl('p1');
+    dispatch(makeEvent('Enter', el)); // pick up at (0,0)
+    dispatch(makeEvent('ArrowDown', el)); // -> (1,0), announces the move
+    expect(showLineHint).toHaveBeenCalledWith([3], []);
+    // One coherent announcement — position AND clears-count in a single write.
+    const last = announce.mock.calls[announce.mock.calls.length - 1]?.[0];
+    expect(last).toBe('Row 2, column 1 — clears 1 line');
+  });
+
+  it('clears the hint on a blocked move and again on cancel (all exits)', () => {
+    const { showLineHint, clearLineHint, dispatch } = setup({
+      canPlaceAt: () => false,
+      linesCompletedAt: () => ({ rows: [3], cols: [] }),
+    });
+    const el = makePieceEl('p1');
+    dispatch(makeEvent('Enter', el)); // pick up (invalid) -> clearLineHint
+    dispatch(makeEvent('ArrowDown', el)); // still invalid -> clearLineHint
+    expect(showLineHint).not.toHaveBeenCalled();
+    const beforeCancel = clearLineHint.mock.calls.length;
+    expect(beforeCancel).toBeGreaterThanOrEqual(1);
+    dispatch(makeEvent('Escape', el)); // cancel routes through clear() -> clearLineHint
+    expect(clearLineHint.mock.calls.length).toBeGreaterThan(beforeCancel);
   });
 });

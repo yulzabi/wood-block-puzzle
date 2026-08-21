@@ -12,6 +12,7 @@
 import type { Coord, Move, Piece, Shape } from '../core/types';
 import type { BoardView } from '../ui/board-view';
 import { buildPieceGrid } from '../ui/tray-view';
+import { type CompletedLines, clearsFragment, lineCount } from './line-hint';
 
 /** Pure: the piece origin is the pointer's cell minus the grabbed cell offset. */
 export function resolveOrigin(pointerCell: Coord, anchor: Coord): Coord {
@@ -32,7 +33,7 @@ export interface DragConfig {
   /** Whether a shape may be placed at an origin on the current board. */
   canPlaceAt(shape: Shape, at: Coord): boolean;
   /** Rows/cols a valid placement would complete (for the line-completion hint). */
-  linesCompletedAt(shape: Shape, at: Coord): { rows: number[]; cols: number[] };
+  linesCompletedAt(shape: Shape, at: Coord): CompletedLines;
   /** Optional screen-reader announcement (e.g. "Placing here clears 2 lines"). */
   announce?(message: string): void;
   /** Called with a valid placement Move on drop. */
@@ -213,8 +214,8 @@ export class DragController {
         if (valid) {
           const lines = this.cfg.linesCompletedAt(s.piece.shape, origin);
           this.cfg.boardView.showLineHint(lines.rows, lines.cols);
-          const n = lines.rows.length + lines.cols.length;
-          if (n > 0) this.cfg.announce?.(`Placing here clears ${n} line${n > 1 ? 's' : ''}`);
+          const frag = clearsFragment(lineCount(lines));
+          if (frag) this.cfg.announce?.(`Placing here ${frag}`);
         } else {
           this.cfg.boardView.clearLineHint();
         }

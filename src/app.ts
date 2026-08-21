@@ -144,6 +144,7 @@ export class App {
       boardView: this.boardView,
       getPieces: () => this.state.tray,
       canPlaceAt: (shape, at) => canPlace(this.state.board, shape, at),
+      linesCompletedAt: (shape, at) => linesCompletedBy(this.state.board, shape, at),
       onPlace: (move) => this.handlePlace(move),
       announce: (msg) => this.announce(msg),
     });

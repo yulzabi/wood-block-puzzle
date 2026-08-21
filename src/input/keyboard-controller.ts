@@ -10,12 +10,15 @@
 import type { Coord, Move, Piece, Shape } from '../core/types';
 import { BOARD_SIZE } from '../core/types';
 import type { BoardView } from '../ui/board-view';
+import { type CompletedLines, clearsFragment, lineCount } from './line-hint';
 
 export interface KeyboardConfig {
   readonly trayEl: HTMLElement;
   readonly boardView: BoardView;
   getPieces(): readonly Piece[];
   canPlaceAt(shape: Shape, at: Coord): boolean;
+  /** Rows/cols a valid placement would complete (for the line-completion hint). */
+  linesCompletedAt(shape: Shape, at: Coord): CompletedLines;
   onPlace(move: Move): void;
   announce(message: string): void;
 }
@@ -114,8 +117,24 @@ export class KeyboardController {
     const { piece, origin } = this.held;
     const valid = this.cfg.canPlaceAt(piece.shape, origin);
     this.cfg.boardView.showPreview(absCells(piece.shape, origin), valid);
+
+    // Line-completion hint, mirroring the drag path (this is the higher-value
+    // half for screen-reader users, who rely entirely on the announcement).
+    let clears = 0;
+    if (valid) {
+      const lines = this.cfg.linesCompletedAt(piece.shape, origin);
+      this.cfg.boardView.showLineHint(lines.rows, lines.cols);
+      clears = lineCount(lines);
+    } else {
+      this.cfg.boardView.clearLineHint();
+    }
+
     if (announce) {
-      this.cfg.announce(`Row ${origin.row + 1}, column ${origin.col + 1}${valid ? '' : ', blocked'}`);
+      // One coherent announcement per move — position, then blocked / clears-N.
+      let msg = `Row ${origin.row + 1}, column ${origin.col + 1}`;
+      if (!valid) msg += ', blocked';
+      else if (clears > 0) msg += ` — ${clearsFragment(clears)}`;
+      this.cfg.announce(msg);
     }
   }
 
@@ -143,5 +162,7 @@ export class KeyboardController {
     this.held = null;
     this.heldEl = null;
     this.cfg.boardView.clearPreview();
+    // Clears on every exit: drop, cancel, and setInteractive(false) all route here.
+    this.cfg.boardView.clearLineHint();
   }
 }
