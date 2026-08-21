@@ -86,6 +86,10 @@
   width: 100%;
   max-width: min(100%, calc(100dvh - 220px));
   aspect-ratio: 1 / 1;
+  /* Isolate the board's internal layout so preview/fill class changes during a
+     drag don't invalidate ancestor layout. Deliberately not `paint` — that would
+     clip the edge cells' placement/clear pop animations (scale up to 1.15). */
+  contain: layout;
   padding: 8px;
   border-radius: var(--radius-panel);
   background:
