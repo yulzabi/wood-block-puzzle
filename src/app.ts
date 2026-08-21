@@ -43,6 +43,7 @@ import {
   renderGameOver,
   renderHome,
   renderInstallAffordance,
+  renderConfirm,
   renderIntro,
   renderLevelComplete,
   renderLevelFailed,
@@ -104,14 +105,23 @@ export class App {
       window.addEventListener('appinstalled', () => this.installAffordance?.markInstalled());
     }
 
-    // Build the in-game layout: HUD (top), board (middle), tray (bottom).
+    // Build the in-game layout: top bar (menu) / HUD / board / tray.
     const layout = document.createElement('div');
     layout.className = 'game-layout';
+    const topBar = document.createElement('div');
+    topBar.className = 'game-topbar';
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'btn btn--ghost game-menu-btn';
+    menuBtn.type = 'button';
+    menuBtn.setAttribute('aria-label', 'Back to menu');
+    menuBtn.textContent = '← Menu';
+    menuBtn.addEventListener('click', () => this.confirmQuit());
+    topBar.append(menuBtn);
     const hudEl = document.createElement('div');
     const boardWrap = document.createElement('div');
     boardWrap.className = 'board-wrap';
     const trayEl = document.createElement('div');
-    layout.append(hudEl, boardWrap, trayEl);
+    layout.append(topBar, hudEl, boardWrap, trayEl);
     this.screens.game.append(layout);
 
     this.hud = new HUD(hudEl);
@@ -147,7 +157,12 @@ export class App {
     if (!loadSeenIntro()) {
       // Wait until the home screen has painted before overlaying the intro.
       // (Showing the opacity-0 overlay as the first paint suppresses FCP.)
-      requestAnimationFrame(() => window.setTimeout(() => this.showIntro(), 450));
+      requestAnimationFrame(() =>
+        window.setTimeout(() => {
+          // Don't pop the intro over a game the user started during the delay.
+          if (this.state.status !== 'playing') this.showIntro();
+        }, 450),
+      );
     }
   }
 
@@ -450,6 +465,27 @@ export class App {
     this.state = retryLevel(this.state).state;
     this.bumpGames();
     this.enterGame();
+  }
+
+  /** In-game "← Menu": confirm before abandoning the current run. */
+  private confirmQuit(): void {
+    if (this.state.status !== 'playing') return;
+    this.setInteractive(false); // also stops the keyboard controller's Escape handling
+    renderConfirm(this.screens.overlay, {
+      title: 'Quit to menu?',
+      message: 'Your current game will end.',
+      confirmLabel: 'Quit',
+      cancelLabel: 'Keep playing',
+      onConfirm: () => this.goHome(),
+      onCancel: () => this.resumeGame(),
+    });
+    this.screens.show('overlay');
+  }
+
+  /** Cancel the quit confirm and return to the in-progress game. */
+  private resumeGame(): void {
+    this.screens.show('game');
+    this.setInteractive(true);
   }
 
   private goHome(): void {

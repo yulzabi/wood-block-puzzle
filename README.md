@@ -105,7 +105,7 @@ scripts/      # icon generation + Lighthouse runner
 
 **Automated (in this repo):**
 
-- ✅ **Unit tests — 137 passing** across the core, platform, and pure UI/input helpers (placement validation, line clearing, scoring + streak multiplier, game-over/level-complete/level-failed detection including a refill-into-dead-end case, level generation, piece generation, RNG determinism, storage safety for all persisted blobs, the audio mute/unavailable gate, the keyboard `clampOrigin` + pickup/drop path, and `describePiece` labels). Run `npm test`.
+- ✅ **Unit tests** — the full suite (run `npm test`) covers the core, platform, and pure UI/input helpers (placement validation, line clearing, scoring + streak multiplier, game-over/level-complete/level-failed detection including a refill-into-dead-end case, level generation determinism + count floor, piece generation, RNG determinism, storage safety for all persisted blobs, the audio mute/unavailable gate, the keyboard `clampOrigin` + pickup/drop path, and `describePiece` labels).
 - ✅ **Type safety** — strict `tsc --noEmit` passes.
 - ✅ **Lighthouse + PWA check** (`npm run lighthouse`) on the production build via headless Chrome.
 

@@ -187,6 +187,61 @@ export function renderGameOver(gameover: HTMLElement, opts: GameOverOpts): void 
   panel.classList.add('enter');
 }
 
+/** Options for a generic confirm dialog (e.g. quit-to-menu). */
+export interface ConfirmOpts {
+  readonly title: string;
+  readonly message: string;
+  readonly confirmLabel: string;
+  readonly cancelLabel: string;
+  onConfirm(): void;
+  onCancel(): void;
+}
+
+/**
+ * Populate a compact confirm overlay. Focus defaults to the (safe) cancel
+ * button, and Escape cancels, so a stray Enter/Esc can't trigger the
+ * destructive action. Reuses the shared overlay panel styling.
+ */
+export function renderConfirm(overlay: HTMLElement, opts: ConfirmOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel confirm-panel');
+
+  const title = el('h2', 'title gameover-title');
+  title.textContent = opts.title;
+
+  const message = el('p', 'gameover-best');
+  message.textContent = opts.message;
+
+  // Cancel is primary + first (focused) so the safe choice is the default.
+  const cancel = document.createElement('button');
+  cancel.className = 'btn btn--primary';
+  cancel.type = 'button';
+  cancel.textContent = opts.cancelLabel;
+  cancel.addEventListener('click', () => close());
+
+  const confirm = document.createElement('button');
+  confirm.className = 'btn btn--ghost';
+  confirm.type = 'button';
+  confirm.textContent = opts.confirmLabel;
+  confirm.addEventListener('click', () => {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onConfirm();
+  });
+
+  function close(): void {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onCancel();
+  }
+
+  panel.append(title, message, cancel, confirm);
+  overlay.append(panel);
+  replayEnter(panel);
+  wireOverlay(panel, close);
+  cancel.focus(); // default to the safe action
+}
+
 /** Options for the home-screen mode menu. */
 export interface HomeOpts {
   onLevels(): void;

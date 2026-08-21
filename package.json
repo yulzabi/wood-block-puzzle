@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Wood Block Puzzle — an installable, offline-capable PWA block-placement puzzle.",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

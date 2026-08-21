@@ -12,6 +12,19 @@
   padding: 4px;
 }
 
+/* ---- In-game top bar (back to menu) ---- */
+.game-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.game-menu-btn {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 16px;
+}
+
 /* ---- HUD ---- */
 .hud {
   flex: 0 0 auto;

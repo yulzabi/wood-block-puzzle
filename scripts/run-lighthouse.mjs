@@ -119,6 +119,9 @@ async function main() {
     await waitForServer(URL);
 
     console.log('› Launching headless Chrome + Lighthouse…');
+    // --no-sandbox lets Chrome launch as root in CI containers. It's safe here
+    // because this script only ever loads our own freshly-built localhost preview,
+    // never untrusted content. Don't reuse this flag to browse arbitrary pages.
     chrome = await launch({ chromeFlags: ['--headless=new', '--no-sandbox', '--disable-gpu'] });
     const runner = await lighthouse(URL, { port: chrome.port, output: 'json', logLevel: 'error' });
     const lhr = runner.lhr;

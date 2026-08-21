@@ -18,7 +18,9 @@ import { fileURLToPath } from 'node:url';
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
 
-// Wood tones (mirror src/styles/theme.css --wood-*).
+// Wood tones for the icon tiles — a hand-picked subset of the theme palette
+// (src/styles/theme.css --wood-1..6), kept in sync manually. If you retheme the
+// blocks, update these too so the icon doesn't drift from the in-game look.
 const TILES = ['#d9a066', '#c8894e', '#b06f39', '#9a5a2c'];
 
 /** One rounded, top-highlighted wood tile. */
