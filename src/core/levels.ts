@@ -1,14 +1,20 @@
 /**
  * Procedural level generation (pure, deterministic per level number).
  *
- * A level starts with a scatter of pre-filled "target" blocks; the player wins
- * by clearing them all (via full rows/columns) AND reaching the target score.
+ * Two kinds of level (either/or, never both):
+ * - Level 1 is a `score` goal: an empty board where the player races to a
+ *   target score.
+ * - Level 2+ are `gems` goals: clear a per-color quota of gems. Some gems start
+ *   on the board; the rest ride in on tray pieces (a later slice). The supply
+ *   plan guarantees `startingGems[c] + supply[c] >= quota[c] + margin` per color
+ *   so the level is always solvable with slack.
+ *
  * Difficulty scales with the level number. Generation is seeded solely by the
  * level number, so a given level always looks the same.
  */
 
 import type { Board, GoalType } from './types';
-import { BOARD_SIZE, MATERIAL_COUNT } from './types';
+import { BOARD_SIZE } from './types';
 import { createBoard } from './board';
 import { nextInt, seedState } from './rng';
 
@@ -17,15 +23,49 @@ const CELL_COUNT = BOARD_SIZE * BOARD_SIZE;
 const MAX_GEMS = 28;
 /** Keep at least one empty cell in every row/column so no line starts full. */
 const MAX_PER_LINE = BOARD_SIZE - 1;
+/** Solvability slack: always plan a few more gems than the quota strictly needs. */
+export const GEM_MARGIN = 2;
+/** Cap on distinct gem colors per level (keeps the per-color HUD readable). */
+const MAX_GEM_COLORS = 3;
+
+/** The win condition for a Levels session: score race (level 1) or gem quota (2+). */
+export function goalTypeForLevel(level: number): GoalType {
+  return level <= 1 ? 'score' : 'gems';
+}
 
 /**
- * Number of pre-placed gem blocks for a level. Gentle +1/level opening
- * (4,5,6,7,8 for levels 1–5) with a quadratic term that accelerates the ramp
- * from ~level 6 on (10,12,14,16,19,22,25,28), capped at 28.
+ * Number of gems a gem-goal level requires cleared (its total quota). Gentle
+ * +1/level opening with a quadratic term that accelerates from ~level 6 on,
+ * capped at 28.
  */
 export function gemCountForLevel(level: number): number {
   const lvl = Math.max(1, level);
   return Math.min(3 + lvl + Math.floor(Math.max(0, lvl - 3) ** 2 / 8), MAX_GEMS);
+}
+
+/**
+ * Per-color supply plan: how many gems of each color must still be dealt (via
+ * tray pieces) so that `startingGems[c] + supply[c] >= quota[c] + margin`.
+ * Floored at 0 (a board already over quota+margin needs no supply). Pure.
+ */
+export function planGemSupply(
+  quotas: Record<number, number>,
+  startingGems: Record<number, number>,
+  margin: number = GEM_MARGIN,
+): Record<number, number> {
+  const supply: Record<number, number> = {};
+  for (const [color, quota] of Object.entries(quotas)) {
+    const c = Number(color);
+    supply[c] = Math.max(0, quota + margin - (startingGems[c] ?? 0));
+  }
+  return supply;
+}
+
+/** Per-color counts of a gem channel (0 entries omitted). */
+function perColorCount(gems: Uint8Array): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const v of gems) if (v !== 0) counts[v] = (counts[v] ?? 0) + 1;
+  return counts;
 }
 
 /**
@@ -41,17 +81,17 @@ export function targetScoreForLevel(level: number): number {
  * Build the starting board + gem channel + goal for `level`.
  * Deterministic: the same `level` always yields the same result.
  *
- * - `board`: pre-filled cells carry a wood-tone material so they render.
- * - `gems`: a length-64 channel; 0 = none, >0 = the gem color on that cell
- *   (mirrors the pre-filled block's material). A gem is cleared when its cell is.
- * - `quotas`: per-color count of the gems placed (the objective total).
- * No complete row or column is ever pre-filled (capped at BOARD_SIZE-1 per line),
- * so nothing clears on load and the first tray always has room.
+ * - Score goal (level 1): empty board, no gems/quotas/supply, a positive
+ *   `targetScore`.
+ * - Gem goal (level 2+): per-color `quotas`, a scatter of starting `gems` on the
+ *   board (fewer than quota — the board holds only a portion), and a
+ *   `gemSupplyRemaining` plan so the objective is solvable with margin. Gems
+ *   carry a color (`gems[i] === board[i]`). No full row/column is ever
+ *   pre-filled (capped at BOARD_SIZE-1 per line), so nothing clears on load.
  *
- * NOTE (P3 migration): levels currently emit `goalType: 'score'` and still carry
- * pre-filled gem blocks with the combined "clear gems AND reach score" win — this
- * preserves the pre-migration behavior. Real per-color gem-goal generation +
- * supply arrives in a later slice.
+ * NOTE: This slice produces the plan only — gems are not yet spawned onto tray
+ * pieces, and the win condition still uses the pre-split combined check until
+ * the engine slice lands.
  */
 export function generateLevel(level: number): {
   board: Board;
@@ -63,17 +103,41 @@ export function generateLevel(level: number): {
 } {
   const board = createBoard();
   const gems = createBoard(); // zeroed Uint8Array(64); >0 = gem color on that cell
+  const goalType = goalTypeForLevel(level);
+
+  if (goalType === 'score') {
+    // A clean board score race — no gems.
+    return { board, gems, quotas: {}, gemSupplyRemaining: {}, goalType, targetScore: targetScoreForLevel(level) };
+  }
+
+  // --- Gem goal (level 2+) ---
+  const totalQuota = gemCountForLevel(level);
+  const numColors = Math.min(MAX_GEM_COLORS, Math.max(1, 1 + Math.floor((level - 2) / 3)));
+
+  // Per-color quota: distribute the total as evenly as possible (colors 1..N).
   const quotas: Record<number, number> = {};
+  const base = Math.floor(totalQuota / numColors);
+  const extra = totalQuota % numColors;
+  for (let c = 1; c <= numColors; c++) quotas[c] = base + (c <= extra ? 1 : 0);
+
+  // Start with ~half of each color's quota on the board; the rest is supply.
+  const toPlace: Record<number, number> = {};
+  let startBudget = 0;
+  for (let c = 1; c <= numColors; c++) {
+    const share = Math.floor((quotas[c] ?? 0) / 2);
+    toPlace[c] = share;
+    startBudget += share;
+  }
+
   const rowCount = new Uint8Array(BOARD_SIZE);
   const colCount = new Uint8Array(BOARD_SIZE);
-
-  const want = gemCountForLevel(level);
-  let placed = 0;
   let state = seedState(level * 0x9e3779b1 + 0x1234);
+  let placed = 0;
   let attempts = 0;
   const maxAttempts = CELL_COUNT * 40;
+  let color = 1; // fill colors in order; advance when a color's board share is met
 
-  while (placed < want && attempts < maxAttempts) {
+  while (placed < startBudget && attempts < maxAttempts) {
     attempts++;
     const pick = nextInt(state, CELL_COUNT);
     state = pick.state;
@@ -85,18 +149,21 @@ export function generateLevel(level: number): {
       continue; // keep a gap in every row/column
     }
 
-    const matPick = nextInt(state, MATERIAL_COUNT);
-    state = matPick.state;
-    const color = matPick.value + 1; // 1..MATERIAL_COUNT
+    while (color <= numColors && (toPlace[color] ?? 0) <= 0) color++;
+    if (color > numColors) break; // every color's board share is placed
+    toPlace[color] = (toPlace[color] ?? 0) - 1;
+
     board[i] = color;
     gems[i] = color; // the gem rides the pre-filled block, carrying its color
-    quotas[color] = (quotas[color] ?? 0) + 1;
     rowCount[row] = (rowCount[row] ?? 0) + 1;
     colCount[col] = (colCount[col] ?? 0) + 1;
     placed++;
   }
 
-  // gemSupplyRemaining is a gems-goal concept (undrawn supply); unused for these
-  // score-goal levels, so it starts empty.
-  return { board, gems, quotas, gemSupplyRemaining: {}, goalType: 'score', targetScore: targetScoreForLevel(level) };
+  // Plan supply against what actually landed (the per-line gap cap may under-fill).
+  const startingGems = perColorCount(gems);
+  const gemSupplyRemaining = planGemSupply(quotas, startingGems, GEM_MARGIN);
+
+  // Gem levels win by quota, not score; targetScore is unused (0).
+  return { board, gems, quotas, gemSupplyRemaining, goalType, targetScore: 0 };
 }

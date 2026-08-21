@@ -277,7 +277,7 @@ describe('restart', () => {
 });
 
 describe('levels — start / progression', () => {
-  it('newLevelsGame starts a playing level with gems and a target score', () => {
+  it('newLevelsGame level 1 is a playing score goal (no gems)', () => {
     const g = newLevelsGame(1, 7, 25);
     expect(g.mode).toBe('levels');
     expect(g.status).toBe('playing');
@@ -285,10 +285,20 @@ describe('levels — start / progression', () => {
     expect(g.tray).toHaveLength(TRAY_SIZE);
     expect(g.score).toBe(0);
     expect(g.highScore).toBe(25);
+    expect(g.goalType).toBe('score');
     expect(g.targetScore).toBeGreaterThan(0);
+    expect(maskCount(g.gems)).toBe(0);
+    expect(sumCounts(g.quotas)).toBe(0);
+  });
+
+  it('newLevelsGame level 2+ is a gem goal with quotas and fewer board gems than quota', () => {
+    const g = newLevelsGame(2, 7, 25);
+    expect(g.mode).toBe('levels');
+    expect(g.status).toBe('playing');
+    expect(g.goalType).toBe('gems');
     expect(sumCounts(g.quotas)).toBeGreaterThan(0);
-    // Every gem on the board is counted in the per-color quota totals.
-    expect(maskCount(g.gems)).toBe(sumCounts(g.quotas));
+    // Only a portion of the objective is on the board; the rest arrives as supply.
+    expect(maskCount(g.gems)).toBeLessThan(sumCounts(g.quotas));
   });
 
   it('nextLevel advances and retryLevel rebuilds the same level (board matches generateLevel)', () => {
