@@ -87,6 +87,18 @@ backward-compatible with legacy blobs; button absent from DOM when off; single-h
 (clears preview/line-hint first). 173 tests green. Pending owner push.**
 
 ## P3 — Gem objective system (Levels redesign)
+- [x] **GEM-COLORBLIND-TOGGLE (d7b1d18) — DONE.** "Colorblind gem markers" setting, default
+  OFF; ON overlays the letter cue (R/B/G/A/P/C) on gems (agent chose letter over per-color
+  facet patterns — defensible: 6 facet cuts wouldn't be reliably distinguishable at ~40px for
+  the users who need it). Live re-render on toggle; default = clean faceted gemstones; color
+  ORDER (blue→amber→red) active regardless; screen-reader color names always present. Backward-
+  compat load + default-false tested. 199 green. Records the letter-drop as a deliberate,
+  user-controlled decision (not a silent reversal).
+- [ ] **GEM-DIAMOND-SHAPE — LIKELY RESOLVED by fa5db38** (faceted 5-point gemstone polygon,
+  inherently non-square, replaced the rotated-square that read as a square). **Owner to confirm
+  ON DEVICE** it now reads as a gem, at both board (~40px) and tray (22px) sizes. If still off,
+  the cause was owner-identified as the square cell BACKGROUND behind the marker — suppress the
+  `.filled` wood-block bg on gem cells (`.cell:has(.gem)` transparent / `.cell--gem` modifier).
 
 **Progress: Slices 0–3 DONE. Slice 1 (904060b) migration; Slice 2 (77d9fab) generation +
 solvability invariant; Slice 3 (48f054c) engine either/or win + `gemsCleared` event

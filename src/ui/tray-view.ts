@@ -51,6 +51,7 @@ export function buildPieceGrid(
   cellPx: number,
   gapPx: number,
   gems?: Readonly<Record<number, number>>,
+  colorblindGems = false,
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'piece-grid';
@@ -65,7 +66,7 @@ export function buildPieceGrid(
     block.style.gridRow = String(c.row + 1);
     block.style.setProperty('--block', `var(--wood-${material})`);
     const gemColor = gems?.[k];
-    if (gemColor) block.append(buildGemMarker(gemColor));
+    if (gemColor) block.append(buildGemMarker(gemColor, colorblindGems));
     grid.append(block);
   });
   return grid;
@@ -74,6 +75,7 @@ export function buildPieceGrid(
 export class TrayView {
   readonly el: HTMLElement;
   private readonly slots: HTMLElement[] = [];
+  private colorblindGems = false;
 
   constructor(container: HTMLElement) {
     this.el = container;
@@ -84,6 +86,11 @@ export class TrayView {
       this.slots.push(slot);
       this.el.append(slot);
     }
+  }
+
+  /** Toggle the opt-in colorblind letter cue on gems (applies on next render). */
+  setColorblindGems(on: boolean): void {
+    this.colorblindGems = on;
   }
 
   /** Render the current tray; unplaced pieces become draggable, placed ones vanish. */
@@ -101,7 +108,9 @@ export class TrayView {
       pieceEl.tabIndex = 0;
       pieceEl.setAttribute('role', 'button');
       pieceEl.setAttribute('aria-label', describePiece(piece.shape) + gemSuffix(piece));
-      pieceEl.append(buildPieceGrid(piece.shape, piece.material, TRAY_CELL, TRAY_GAP, piece.gems));
+      pieceEl.append(
+        buildPieceGrid(piece.shape, piece.material, TRAY_CELL, TRAY_GAP, piece.gems, this.colorblindGems),
+      );
       slot.append(pieceEl);
     }
   }

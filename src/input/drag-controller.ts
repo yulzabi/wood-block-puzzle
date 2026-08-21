@@ -36,6 +36,8 @@ export interface DragConfig {
   linesCompletedAt(shape: Shape, at: Coord): CompletedLines;
   /** Optional screen-reader announcement (e.g. "Placing here clears 2 lines"). */
   announce?(message: string): void;
+  /** Whether the lifted ghost should show the colorblind gem letter cue. */
+  colorblindGems?(): boolean;
   /** Called with a valid placement Move on drop. */
   onPlace(move: Move): void;
 }
@@ -110,7 +112,9 @@ export class DragController {
 
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
-    ghost.append(buildPieceGrid(piece.shape, piece.material, cell, gap, piece.gems));
+    ghost.append(
+      buildPieceGrid(piece.shape, piece.material, cell, gap, piece.gems, this.cfg.colorblindGems?.() ?? false),
+    );
     document.body.append(ghost);
 
     pieceEl.classList.add('dragging');

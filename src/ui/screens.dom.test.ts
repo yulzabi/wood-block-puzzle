@@ -93,7 +93,7 @@ describe('screens (DOM)', () => {
     const s = createScreens(root);
     const onChange = vi.fn();
     renderSettings(s.overlay, {
-      settings: { sound: true, haptics: true, hints: false },
+      settings: { sound: true, haptics: true, hints: false, colorblindGems: false },
       onChange,
       onClose: vi.fn(),
     });
@@ -103,7 +103,24 @@ describe('screens (DOM)', () => {
 
     // Toggling on reports the new settings with hints flipped, others intact.
     hints.click();
-    expect(onChange).toHaveBeenCalledWith({ sound: true, haptics: true, hints: true });
+    expect(onChange).toHaveBeenCalledWith({ sound: true, haptics: true, hints: true, colorblindGems: false });
     expect(hints.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renderSettings shows a Colorblind gem markers toggle, defaulting off', () => {
+    const s = createScreens(root);
+    const onChange = vi.fn();
+    renderSettings(s.overlay, {
+      settings: { sound: true, haptics: true, hints: false, colorblindGems: false },
+      onChange,
+      onClose: vi.fn(),
+    });
+
+    const cb = buttonByText(s.overlay, 'Colorblind gem markers: Off');
+    expect(cb.getAttribute('aria-pressed')).toBe('false');
+
+    cb.click();
+    expect(onChange).toHaveBeenCalledWith({ sound: true, haptics: true, hints: false, colorblindGems: true });
+    expect(cb.getAttribute('aria-pressed')).toBe('true');
   });
 });

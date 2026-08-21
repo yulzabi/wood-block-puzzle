@@ -78,16 +78,18 @@ export function saveLevelProgress(level: number): void {
   }
 }
 
-/** User settings (audio + haptics + placement-hints toggles). */
+/** User settings (audio + haptics + placement-hints + colorblind toggles). */
 export interface Settings {
   sound: boolean;
   haptics: boolean;
   /** Placement hints (the in-game "Hint" button). Defaults OFF. */
   hints: boolean;
+  /** Non-hue distinguisher (a letter) on gem markers. Defaults OFF. */
+  colorblindGems: boolean;
 }
 
-/** Sound/haptics default ON; hints default OFF (opt-in assist). */
-const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, hints: false };
+/** Sound/haptics default ON; hints + colorblind gems default OFF (opt-in). */
+const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true, hints: false, colorblindGems: false };
 
 /**
  * Load settings. Each field falls back to its default independently, so an
@@ -108,6 +110,8 @@ export function loadSettings(): Settings {
       sound: typeof obj['sound'] === 'boolean' ? obj['sound'] : DEFAULT_SETTINGS.sound,
       haptics: typeof obj['haptics'] === 'boolean' ? obj['haptics'] : DEFAULT_SETTINGS.haptics,
       hints: typeof obj['hints'] === 'boolean' ? obj['hints'] : DEFAULT_SETTINGS.hints,
+      colorblindGems:
+        typeof obj['colorblindGems'] === 'boolean' ? obj['colorblindGems'] : DEFAULT_SETTINGS.colorblindGems,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -125,6 +129,7 @@ export function saveSettings(settings: Settings): void {
         sound: !!settings.sound,
         haptics: !!settings.haptics,
         hints: !!settings.hints,
+        colorblindGems: !!settings.colorblindGems,
       }),
     );
   } catch {

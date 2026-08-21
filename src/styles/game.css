@@ -185,6 +185,15 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* Opt-in colorblind cue: a legible letter, hue-independent (Settings toggle). */
+.gem__cb {
+  fill: #fff;
+  font-size: 44px;
+  font-weight: 900;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 5;
+}
 
 .cell.filled {
   background:

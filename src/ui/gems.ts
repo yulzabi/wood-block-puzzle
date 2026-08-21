@@ -19,6 +19,12 @@ export const GEM_COLOR_NAMES: readonly string[] = [
   'cyan',
 ];
 
+/**
+ * Single-letter cue per gem color, shown only when the colorblind-markers
+ * setting is on — a hue-independent distinguisher (R/B/G/A/P/C).
+ */
+export const GEM_COLOR_LETTERS: readonly string[] = ['', 'R', 'B', 'G', 'A', 'P', 'C'];
+
 /** Human name for a gem color (falls back gracefully for out-of-range indices). */
 export function gemColorName(color: number): string {
   return GEM_COLOR_NAMES[color] ?? `color ${color}`;
@@ -45,8 +51,11 @@ function svgEl(name: string, attrs: Record<string, string>): SVGElement {
  *  ├───girdle──┤    2,44          98,44
  *   ╲ pavilion╱          ╲      ╱
  *      ▼                    50,98
+ *
+ * When `colorblind` is true, a legible letter cue (R/B/G/A/P/C) is overlaid so
+ * colors are distinguishable without relying on hue.
  */
-export function buildGemMarker(color: number): SVGElement {
+export function buildGemMarker(color: number, colorblind = false): SVGElement {
   const svg = svgEl('svg', {
     class: `gem gem--${color}`,
     viewBox: '0 0 100 100',
@@ -66,5 +75,18 @@ export function buildGemMarker(color: number): SVGElement {
       d: 'M2,44 H98 M26,18 L36,44 M74,18 L64,44 M36,44 L50,98 M64,44 L50,98',
     }),
   );
+
+  if (colorblind) {
+    const letter = svgEl('text', {
+      class: 'gem__cb',
+      x: '50',
+      y: '50',
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central',
+    });
+    letter.textContent = GEM_COLOR_LETTERS[color] ?? String(color);
+    svg.append(letter);
+  }
+
   return svg;
 }

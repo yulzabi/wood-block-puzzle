@@ -91,7 +91,7 @@ export class HUD {
   }
 
   /** Gem-goal Levels HUD: current level + a per-color "remaining" chip each. */
-  renderGems(level: number, chips: readonly GemChip[]): void {
+  renderGems(level: number, chips: readonly GemChip[], colorblind = false): void {
     this.endlessRow.hidden = true;
     this.levelsRow.hidden = true;
     this.gemsRow.hidden = false;
@@ -101,7 +101,7 @@ export class HUD {
       const chip = document.createElement('div');
       chip.className = 'gem-chip';
       chip.setAttribute('aria-label', `${remaining} ${gemColorName(color)} left`);
-      chip.append(buildGemMarker(color));
+      chip.append(buildGemMarker(color, colorblind));
       const count = document.createElement('span');
       count.className = 'gem-chip-count';
       count.textContent = String(remaining);

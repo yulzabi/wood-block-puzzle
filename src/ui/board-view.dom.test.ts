@@ -65,6 +65,28 @@ describe('BoardView (DOM)', () => {
     expect(cells()[6]!.querySelector('.gem')).toBeNull();
   });
 
+  it('shows the colorblind letter cue on gems only when enabled, and toggles live', () => {
+    const board = createBoard();
+    const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+    board[5] = 2;
+    gems[5] = 1; // red
+    view.renderBoard(board, gems);
+    // OFF by default — clean gemstone, no letter.
+    expect(cells()[5]!.querySelector('.gem__cb')).toBeNull();
+
+    // Enable + re-render: the letter cue appears (R for red).
+    view.setColorblindGems(true);
+    view.renderBoard(board, gems);
+    const cue = cells()[5]!.querySelector('.gem__cb');
+    expect(cue).not.toBeNull();
+    expect(cue!.textContent).toBe('R');
+
+    // Disable + re-render: the cue is gone again.
+    view.setColorblindGems(false);
+    view.renderBoard(board, gems);
+    expect(cells()[5]!.querySelector('.gem__cb')).toBeNull();
+  });
+
   it('reconciles gem markers: a cleared gem cell drops its diamond on re-render', () => {
     const board = createBoard();
     const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);

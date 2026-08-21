@@ -162,46 +162,52 @@ describe('settings', () => {
   it('round-trips settings', () => {
     const { storage } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
-    saveSettings({ sound: false, haptics: true, hints: true });
-    expect(loadSettings()).toEqual({ sound: false, haptics: true, hints: true });
+    saveSettings({ sound: false, haptics: true, hints: true, colorblindGems: true });
+    expect(loadSettings()).toEqual({ sound: false, haptics: true, hints: true, colorblindGems: true });
   });
 
-  it('defaults sound/haptics ON and hints OFF when missing', () => {
+  it('defaults sound/haptics ON and hints/colorblindGems OFF when missing', () => {
     vi.stubGlobal('localStorage', makeMockStorage().storage);
-    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false });
+    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false, colorblindGems: false });
   });
 
-  it('defaults hints to false explicitly', () => {
+  it('defaults hints and colorblindGems to false explicitly', () => {
     const { storage, map } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
-    // A blob that sets hints=false round-trips false (not silently flipped on).
-    map.set(SETTINGS_KEY, JSON.stringify({ sound: true, haptics: true, hints: false }));
+    // A blob that sets them false round-trips false (not silently flipped on).
+    map.set(SETTINGS_KEY, JSON.stringify({ sound: true, haptics: true, hints: false, colorblindGems: false }));
     expect(loadSettings().hints).toBe(false);
+    expect(loadSettings().colorblindGems).toBe(false);
   });
 
-  it('loads a legacy {sound, haptics} blob with hints defaulted false, not clobbering the others', () => {
+  it('loads a legacy blob (no colorblindGems key) with it defaulted false, not clobbering others', () => {
     const { storage, map } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
-    // Older builds stored no `hints` key. It must default false while sound
-    // and haptics are preserved exactly as stored.
+    // Older builds stored no `colorblindGems` (or `hints`) key. Newer keys must
+    // default false while the stored fields are preserved exactly.
     map.set(SETTINGS_KEY, JSON.stringify({ sound: false, haptics: false }));
-    expect(loadSettings()).toEqual({ sound: false, haptics: false, hints: false });
+    expect(loadSettings()).toEqual({ sound: false, haptics: false, hints: false, colorblindGems: false });
+    // A blob that has hints but not colorblindGems keeps hints, defaults the new key.
+    map.set(SETTINGS_KEY, JSON.stringify({ sound: true, haptics: false, hints: true }));
+    expect(loadSettings()).toEqual({ sound: true, haptics: false, hints: true, colorblindGems: false });
   });
 
   it('falls back to defaults on corrupt JSON / partial values', () => {
     const { storage, map } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
     map.set(SETTINGS_KEY, '{not json');
-    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false });
+    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false, colorblindGems: false });
     map.set(SETTINGS_KEY, JSON.stringify({ sound: false }));
-    expect(loadSettings()).toEqual({ sound: false, haptics: true, hints: false });
+    expect(loadSettings()).toEqual({ sound: false, haptics: true, hints: false, colorblindGems: false });
   });
 
   it('defaults without throwing when storage is unavailable', () => {
     vi.stubGlobal('localStorage', undefined);
     expect(() => loadSettings()).not.toThrow();
-    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false });
-    expect(() => saveSettings({ sound: false, haptics: false, hints: true })).not.toThrow();
+    expect(loadSettings()).toEqual({ sound: true, haptics: true, hints: false, colorblindGems: false });
+    expect(() =>
+      saveSettings({ sound: false, haptics: false, hints: true, colorblindGems: true }),
+    ).not.toThrow();
   });
 });
 

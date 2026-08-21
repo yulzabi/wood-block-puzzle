@@ -52,6 +52,8 @@ export class BoardView {
   private lineHinted: HTMLElement[] = [];
   /** Gem color currently rendered on each cell (0 = none), for reconciliation. */
   private readonly cellGem = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+  /** Whether gem markers show the opt-in colorblind letter cue. */
+  private colorblindGems = false;
   /** Cached grid geometry; null = must re-measure. See metrics(). */
   private cachedMetrics: GridMetrics | null = null;
 
@@ -113,7 +115,7 @@ export class BoardView {
       // Gem diamond: add/update/remove only when the cell's gem color changes.
       if (gemColor !== this.cellGem[i]) {
         cell.querySelector('.gem')?.remove();
-        if (gemColor > 0) cell.append(buildGemMarker(gemColor));
+        if (gemColor > 0) cell.append(buildGemMarker(gemColor, this.colorblindGems));
         this.cellGem[i] = gemColor;
       }
 
@@ -121,6 +123,21 @@ export class BoardView {
       const col = i % BOARD_SIZE;
       const desc = gemColor > 0 ? `${gemColorName(gemColor)} gem` : material > 0 ? 'filled' : 'empty';
       cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, ${desc}`);
+    }
+  }
+
+  /**
+   * Toggle the opt-in colorblind letter cue on gem markers. Invalidates the
+   * rendered markers so the next renderBoard rebuilds them with/without the cue.
+   */
+  setColorblindGems(on: boolean): void {
+    if (on === this.colorblindGems) return;
+    this.colorblindGems = on;
+    for (let i = 0; i < this.cells.length; i++) {
+      if (this.cellGem[i] !== 0) {
+        this.cells[i]?.querySelector('.gem')?.remove();
+        this.cellGem[i] = 0; // force a rebuild on the next render
+      }
     }
   }
 

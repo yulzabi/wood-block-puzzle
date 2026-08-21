@@ -142,6 +142,9 @@ export class App {
     this.hud = new HUD(hudEl);
     this.boardView = new BoardView(boardWrap);
     this.trayView = new TrayView(trayEl);
+    // Apply the persisted colorblind-gem preference to the gem-rendering views.
+    this.boardView.setColorblindGems(this.settings.colorblindGems);
+    this.trayView.setColorblindGems(this.settings.colorblindGems);
 
     this.drag = new DragController({
       trayEl: this.trayView.el,
@@ -150,6 +153,7 @@ export class App {
       canPlaceAt: (shape, at) => canPlace(this.state.board, shape, at),
       linesCompletedAt: (shape, at) => linesCompletedBy(this.state.board, shape, at),
       announce: (msg) => this.announce(msg),
+      colorblindGems: () => this.settings.colorblindGems,
       onPlace: (move) => this.handlePlace(move),
     });
     this.drag.attach();
@@ -214,6 +218,10 @@ export class App {
     setSoundEnabled(next.sound);
     setHapticsEnabled(next.haptics);
     this.syncHintButton();
+    // Live-apply the colorblind gem cue (re-render markers if a game is up).
+    this.boardView.setColorblindGems(next.colorblindGems);
+    this.trayView.setColorblindGems(next.colorblindGems);
+    if (this.state.status === 'playing') this.renderAll();
   }
 
   /** Add or remove the in-game Hint button to match the hints setting. */
@@ -341,7 +349,7 @@ export class App {
     if (this.state.mode !== 'levels') {
       this.hud.render(this.state.score, this.state.highScore);
     } else if (this.state.goalType === 'gems') {
-      this.hud.renderGems(this.state.level, this.gemChips());
+      this.hud.renderGems(this.state.level, this.gemChips(), this.settings.colorblindGems);
     } else {
       this.hud.renderLevels(
         this.state.level,

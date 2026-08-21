@@ -354,7 +354,11 @@ export function renderSettings(overlay: HTMLElement, opts: SettingsOpts): void {
     current.hints = on;
     opts.onChange({ ...current });
   });
-  toggles.append(soundBtn, hapticsBtn, hintsBtn);
+  const colorblindBtn = toggleButton('Colorblind gem markers', current.colorblindGems, (on) => {
+    current.colorblindGems = on;
+    opts.onChange({ ...current });
+  });
+  toggles.append(soundBtn, hapticsBtn, hintsBtn, colorblindBtn);
 
   const done = document.createElement('button');
   done.className = 'btn btn--primary';
