@@ -82,6 +82,10 @@ export class DragController {
     const piece = this.cfg.getPieces().find((p) => p.id === id && !p.placed);
     if (!piece) return;
 
+    // Measure the grid fresh once at pickup; the cache then serves every move
+    // (no getBoundingClientRect during the drag).
+    this.cfg.boardView.invalidateMetrics();
+
     const cell = this.cfg.boardView.cellSize();
     const gap = this.cfg.boardView.gap();
     if (cell <= 0) return;

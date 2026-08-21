@@ -47,6 +47,8 @@ export class BoardView {
   readonly el: HTMLElement;
   private readonly cells: HTMLElement[] = [];
   private previewed: HTMLElement[] = [];
+  /** Cached grid geometry; null = must re-measure. See metrics(). */
+  private cachedMetrics: GridMetrics | null = null;
 
   constructor(container: HTMLElement) {
     this.el = document.createElement('div');
@@ -66,6 +68,17 @@ export class BoardView {
       this.el.append(cell);
     }
     container.append(this.el);
+
+    // Grid geometry is stable between layout changes, so cache it and only
+    // re-measure when the layout could have shifted. This keeps the drag hot
+    // path (clientToCoord + cellOriginClient on every pointermove) from doing
+    // ~4 getBoundingClientRect / forced layout flushes per move — the iPad jank.
+    const invalidate = (): void => {
+      this.cachedMetrics = null;
+    };
+    window.addEventListener('resize', invalidate);
+    window.addEventListener('orientationchange', invalidate);
+    window.addEventListener('scroll', invalidate, { passive: true, capture: true });
   }
 
   /**
@@ -140,8 +153,14 @@ export class BoardView {
     }, ms);
   }
 
-  /** Current grid metrics, or null if the board is not laid out yet. */
+  /**
+   * Current grid metrics, or null if the board is not laid out yet. Cached: the
+   * geometry is re-measured only after a layout change (resize/orientation/scroll)
+   * or an explicit `invalidateMetrics()`, so a drag reads layout zero times per
+   * move. A null result (not laid out) is not cached, so it retries next call.
+   */
   metrics(): GridMetrics | null {
+    if (this.cachedMetrics) return this.cachedMetrics;
     const c0 = this.cells[0];
     const c1 = this.cells[1];
     if (!c0 || !c1) return null;
@@ -149,7 +168,13 @@ export class BoardView {
     if (r0.width === 0) return null;
     const r1 = c1.getBoundingClientRect();
     const gap = Math.max(0, r1.left - r0.right);
-    return { left: r0.left, top: r0.top, cell: r0.width, gap, size: BOARD_SIZE };
+    this.cachedMetrics = { left: r0.left, top: r0.top, cell: r0.width, gap, size: BOARD_SIZE };
+    return this.cachedMetrics;
+  }
+
+  /** Drop cached geometry so the next metrics() re-measures (e.g. at drag start). */
+  invalidateMetrics(): void {
+    this.cachedMetrics = null;
   }
 
   clientToCoord(x: number, y: number): Coord | null {

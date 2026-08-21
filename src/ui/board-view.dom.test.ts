@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { BoardView } from './board-view';
 import { createBoard } from '../core/board';
 import { BOARD_SIZE } from '../core/types';
@@ -81,5 +81,27 @@ describe('BoardView (DOM)', () => {
     // idx(1,0) === BOARD_SIZE
     view.showPreview([{ row: 1, col: 0 }], false);
     expect(cells()[BOARD_SIZE]!.classList.contains('preview--invalid')).toBe(true);
+  });
+
+  it('caches grid metrics (zero per-move layout reads) and re-measures after invalidateMetrics', () => {
+    const rect = {
+      left: 0, top: 0, right: 32, bottom: 32, width: 32, height: 32, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect;
+    const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect);
+    try {
+      // Several geometry queries (as a drag would do per move) share one measurement.
+      view.clientToCoord(10, 10);
+      view.clientToCoord(20, 20);
+      view.cellOriginClient({ row: 0, col: 0 });
+      const afterCached = spy.mock.calls.length;
+      expect(afterCached).toBeLessThanOrEqual(2); // one measure = reads cell 0 + cell 1
+
+      // Explicit invalidation (drag start / resize) forces a fresh measurement.
+      view.invalidateMetrics();
+      view.clientToCoord(10, 10);
+      expect(spy.mock.calls.length).toBeGreaterThan(afterCached);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
