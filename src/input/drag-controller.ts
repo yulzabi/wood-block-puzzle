@@ -60,6 +60,8 @@ export class DragController {
   private moveY = 0;
   /** Pending requestAnimationFrame id for a coalesced update, or 0 if none. */
   private rafId = 0;
+  /** Last previewed (origin,valid) key, so update() skips redundant DOM writes. */
+  private lastKey = '';
 
   constructor(cfg: DragConfig) {
     this.cfg = cfg;
@@ -131,6 +133,7 @@ export class DragController {
     pieceEl.addEventListener('pointercancel', this.onPointerCancel);
     pieceEl.addEventListener('lostpointercapture', this.onPointerCancel);
 
+    this.lastKey = '';
     this.update(e.clientX, e.clientY);
     e.preventDefault();
   };
@@ -188,19 +191,29 @@ export class DragController {
 
     if (pointerCell) {
       const origin = resolveOrigin(pointerCell, s.anchor);
-      const cells = absCells(s.piece.shape, origin);
       const valid = this.cfg.canPlaceAt(s.piece.shape, origin);
       s.origin = origin;
       s.valid = valid;
-      this.cfg.boardView.showPreview(cells, valid);
-      // Snap the ghost to the grid cell it would occupy.
-      const snap = this.cfg.boardView.cellOriginClient(origin);
-      if (snap) this.moveGhost(snap.x, snap.y);
-      else this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
+      // Diff: only touch the DOM when the previewed cell/validity changes. While
+      // the pointer moves within the same cell this is a no-op — the preview and
+      // the grid-snapped ghost are already correct.
+      const key = `${origin.row},${origin.col},${valid ? 1 : 0}`;
+      if (key !== this.lastKey) {
+        this.lastKey = key;
+        this.cfg.boardView.showPreview(absCells(s.piece.shape, origin), valid);
+        const snap = this.cfg.boardView.cellOriginClient(origin);
+        if (snap) this.moveGhost(snap.x, snap.y);
+        else this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
+      }
     } else {
       s.origin = null;
       s.valid = false;
-      this.cfg.boardView.clearPreview();
+      // Clear the preview once on the transition off-grid; the ghost keeps
+      // free-following the pointer every frame.
+      if (this.lastKey !== 'off') {
+        this.lastKey = 'off';
+        this.cfg.boardView.clearPreview();
+      }
       this.moveGhost(x - s.localAnchorX, effY - s.localAnchorY);
     }
   }
