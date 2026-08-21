@@ -90,6 +90,9 @@
      drag don't invalidate ancestor layout. Deliberately not `paint` — that would
      clip the edge cells' placement/clear pop animations (scale up to 1.15). */
   contain: layout;
+  /* Suppress native pan/zoom on the board itself (the .play-surface ancestor
+     also sets this) so touch drags never scroll or zoom the page. */
+  touch-action: none;
   padding: 8px;
   border-radius: var(--radius-panel);
   background:
