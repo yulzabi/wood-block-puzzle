@@ -24,13 +24,13 @@ function absCells(shape: Shape, origin: Coord): Coord[] {
   return shape.cells.map((c) => ({ row: origin.row + c.row, col: origin.col + c.col }));
 }
 
-/** Keep the whole shape in bounds. */
-function clampOrigin(shape: Shape, o: Coord): Coord {
-  const maxRow = Math.max(0, BOARD_SIZE - shape.height);
-  const maxCol = Math.max(0, BOARD_SIZE - shape.width);
+/** Keep the whole shape in bounds. Pure; exported for unit testing. */
+export function clampOrigin(origin: Coord, shape: Shape, boardSize: number = BOARD_SIZE): Coord {
+  const maxRow = Math.max(0, boardSize - shape.height);
+  const maxCol = Math.max(0, boardSize - shape.width);
   return {
-    row: Math.min(Math.max(0, o.row), maxRow),
-    col: Math.min(Math.max(0, o.col), maxCol),
+    row: Math.min(Math.max(0, origin.row), maxRow),
+    col: Math.min(Math.max(0, origin.col), maxCol),
   };
 }
 
@@ -71,12 +71,15 @@ export class KeyboardController {
     const piece = this.cfg.getPieces().find((p) => p.id === id && !p.placed);
     if (!piece) return;
 
-    this.held = { piece, origin: clampOrigin(piece.shape, { row: 0, col: 0 }) };
+    this.held = { piece, origin: clampOrigin({ row: 0, col: 0 }, piece.shape, BOARD_SIZE) };
     this.heldEl = pieceEl;
     pieceEl.classList.add('kb-held');
     this.refresh(false);
     this.cfg.announce('Piece picked up. Arrow keys to move, Enter to place, Escape to cancel.');
+    // Stop this same keydown from also reaching the document listener, which
+    // would otherwise see `held` set and immediately drop at the origin.
     e.preventDefault();
+    e.stopPropagation();
   };
 
   /** While holding: move / drop / cancel. */
@@ -98,10 +101,11 @@ export class KeyboardController {
 
   private move(dr: number, dc: number): void {
     if (!this.held) return;
-    this.held.origin = clampOrigin(this.held.piece.shape, {
-      row: this.held.origin.row + dr,
-      col: this.held.origin.col + dc,
-    });
+    this.held.origin = clampOrigin(
+      { row: this.held.origin.row + dr, col: this.held.origin.col + dc },
+      this.held.piece.shape,
+      BOARD_SIZE,
+    );
     this.refresh(true);
   }
 

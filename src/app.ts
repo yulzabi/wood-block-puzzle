@@ -26,16 +26,28 @@ import {
   saveHighScore,
   loadLevelProgress,
   saveLevelProgress,
+  loadSettings,
+  saveSettings,
+  loadStats,
+  saveStats,
+  loadSeenIntro,
+  saveSeenIntro,
+  type Settings,
+  type Stats,
 } from './platform/storage';
-import { HAPTIC_CLEAR, HAPTIC_PLACE, vibrate } from './platform/haptics';
+import { HAPTIC_CLEAR, HAPTIC_PLACE, setHapticsEnabled, vibrate } from './platform/haptics';
+import { playClear, playPlace, setSoundEnabled } from './platform/audio';
 import { createInstallController, type InstallController } from './platform/install';
 import {
   createScreens,
   renderGameOver,
   renderHome,
   renderInstallAffordance,
+  renderIntro,
   renderLevelComplete,
   renderLevelFailed,
+  renderSettings,
+  renderStats,
   type InstallAffordance,
   type Screens,
 } from './ui/screens';
@@ -44,6 +56,7 @@ import { TrayView } from './ui/tray-view';
 import { HUD, formatMultiplier } from './ui/hud';
 import { DragController } from './input/drag-controller';
 import { KeyboardController } from './input/keyboard-controller';
+import { createParticles, type Particles } from './ui/particles';
 
 export class App {
   private readonly screens: Screens;
@@ -55,12 +68,24 @@ export class App {
   private readonly install: InstallController;
   private readonly installAffordance: InstallAffordance | null;
   private readonly live: HTMLElement;
+  private readonly particles: Particles;
+  private settings: Settings;
+  private stats: Stats;
   private state: GameState;
 
   constructor(root: HTMLElement) {
     this.screens = createScreens(root);
     this.install = createInstallController();
     this.install.init();
+
+    // Apply persisted settings + load stats before anything can play sound/haptics.
+    this.settings = loadSettings();
+    setSoundEnabled(this.settings.sound);
+    setHapticsEnabled(this.settings.haptics);
+    this.stats = loadStats();
+
+    // Decorative line-clear particle overlay (no-op under reduced-motion).
+    this.particles = createParticles(root);
 
     // Visually-hidden live region for screen-reader announcements.
     this.live = document.createElement('div');
@@ -115,6 +140,15 @@ export class App {
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
     this.screens.show('home');
+
+    // First run: show the "How to play" intro once — but on a later frame, so the
+    // (opaque) home screen paints first. Showing the opacity-0 overlay entrance
+    // synchronously here would gate First Contentful Paint on the initial load.
+    if (!loadSeenIntro()) {
+      // Wait until the home screen has painted before overlaying the intro.
+      // (Showing the opacity-0 overlay as the first paint suppresses FCP.)
+      requestAnimationFrame(() => window.setTimeout(() => this.showIntro(), 450));
+    }
   }
 
   /** Render the home menu and (re)attach the install affordance below it. */
@@ -123,19 +157,71 @@ export class App {
       onLevels: () => this.playLevels(loadLevelProgress()),
       onEndless: () => this.playEndless(),
       currentLevel: loadLevelProgress(),
+      onSettings: () => this.showSettings(),
+      onStats: () => this.showStats(),
+      onHowTo: () => this.showIntro(),
     });
     if (this.installAffordance) this.screens.home.append(this.installAffordance.el);
+  }
+
+  // ---- Overlays: settings / stats / intro ----
+  private showSettings(): void {
+    renderSettings(this.screens.overlay, {
+      settings: this.settings,
+      onChange: (next) => this.applySettings(next),
+      onClose: () => this.closeOverlay(),
+    });
+    this.screens.show('overlay');
+  }
+
+  private applySettings(next: Settings): void {
+    this.settings = next;
+    saveSettings(next);
+    setSoundEnabled(next.sound);
+    setHapticsEnabled(next.haptics);
+  }
+
+  private showStats(): void {
+    this.stats = loadStats();
+    renderStats(this.screens.overlay, {
+      stats: this.stats,
+      onClose: () => this.closeOverlay(),
+    });
+    this.screens.show('overlay');
+  }
+
+  private showIntro(): void {
+    renderIntro(this.screens.overlay, {
+      onDismiss: () => {
+        saveSeenIntro();
+        this.closeOverlay();
+      },
+    });
+    this.screens.show('overlay');
+  }
+
+  private closeOverlay(): void {
+    this.renderHomeScreen();
+    this.screens.show('home');
+  }
+
+  /** Count a new game attempt. */
+  private bumpGames(): void {
+    this.stats = { ...this.stats, gamesPlayed: this.stats.gamesPlayed + 1 };
+    saveStats(this.stats);
   }
 
   /** Start an Endless game. */
   private playEndless(): void {
     this.state = startGame(newGame(Date.now(), loadHighScore())).state;
+    this.bumpGames();
     this.enterGame();
   }
 
   /** Start a Levels game at `level`. */
   private playLevels(level: number): void {
     this.state = newLevelsGame(level, Date.now(), loadHighScore());
+    this.bumpGames();
     this.enterGame();
   }
 
@@ -222,6 +308,7 @@ export class App {
       switch (ev.type) {
         case 'placed': {
           vibrate(HAPTIC_PLACE);
+          playPlace();
           this.boardView.animatePlaced(ev.cells);
           const anchor = ev.cells[0];
           if (anchor) placedAt = this.boardView.cellCenterClient(anchor);
@@ -229,10 +316,17 @@ export class App {
         }
         case 'cleared': {
           vibrate(HAPTIC_CLEAR);
+          playClear(this.state.streak);
           this.boardView.animateCleared(ev.cells);
           linesCleared = ev.rows.length + ev.cols.length;
+          this.stats = { ...this.stats, totalLines: this.stats.totalLines + linesCleared };
           // Anchor the clear bonus / combo to the cleared line's centroid.
           clearedAt = this.boardView.cellsCenterClient(ev.cells);
+          // Decorative wood-chip burst at the cleared cells.
+          const pts = ev.cells
+            .map((c) => this.boardView.cellCenterClient(c))
+            .filter((p): p is { x: number; y: number } => p !== null);
+          this.particles.burst(pts);
           break;
         }
         case 'scored': {
@@ -244,6 +338,9 @@ export class App {
         }
         case 'combo': {
           combo = { streak: ev.streak, multiplier: ev.multiplier };
+          if (ev.streak > this.stats.bestStreak) {
+            this.stats = { ...this.stats, bestStreak: ev.streak };
+          }
           const at = clearedAt ?? placedAt;
           if (at) this.hud.popCombo(ev.streak, ev.multiplier, at);
           break;
@@ -261,6 +358,12 @@ export class App {
 
     this.renderHud();
     this.announce(this.moveMessage(linesCleared, combo));
+
+    // Persist accumulated stats (best score / lines / streak updated above).
+    if (this.state.score > this.stats.bestScore) {
+      this.stats = { ...this.stats, bestScore: this.state.score };
+    }
+    saveStats(this.stats);
 
     switch (this.state.status) {
       case 'gameover':
@@ -312,6 +415,7 @@ export class App {
 
   private restartGame(): void {
     this.state = restart(this.state).state;
+    this.bumpGames();
     this.enterGame();
   }
 
@@ -344,6 +448,7 @@ export class App {
 
   private retryCurrentLevel(): void {
     this.state = retryLevel(this.state).state;
+    this.bumpGames();
     this.enterGame();
   }
 

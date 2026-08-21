@@ -12,8 +12,16 @@ export const HAPTIC_CLEAR: number[] = [0, 14, 40, 20];
 
 type VibrateCapable = { vibrate?: (pattern: number | number[]) => boolean };
 
-/** Trigger a vibration pattern where supported; otherwise do nothing. */
+let hapticsEnabled = true;
+
+/** Enable/disable haptics (settings gate). When off, `vibrate` is a no-op. */
+export function setHapticsEnabled(enabled: boolean): void {
+  hapticsEnabled = enabled;
+}
+
+/** Trigger a vibration pattern where supported and enabled; otherwise do nothing. */
 export function vibrate(pattern: number | number[]): void {
+  if (!hapticsEnabled) return;
   try {
     if (typeof navigator === 'undefined') return;
     const nav = navigator as Navigator & VibrateCapable;

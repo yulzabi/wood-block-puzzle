@@ -1,5 +1,16 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { loadHighScore, saveHighScore, loadLevelProgress, saveLevelProgress } from './storage';
+import {
+  loadHighScore,
+  saveHighScore,
+  loadLevelProgress,
+  saveLevelProgress,
+  loadSettings,
+  saveSettings,
+  loadStats,
+  saveStats,
+  loadSeenIntro,
+  saveSeenIntro,
+} from './storage';
 
 const KEY = 'wbp.v1.highscore';
 const LEVEL_KEY = 'wbp.v1.level';
@@ -139,5 +150,97 @@ describe('level progress', () => {
     });
     vi.stubGlobal('localStorage', storage);
     expect(() => saveLevelProgress(4)).not.toThrow();
+  });
+});
+
+describe('settings', () => {
+  const SETTINGS_KEY = 'wbp.v1.settings';
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips settings', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveSettings({ sound: false, haptics: true });
+    expect(loadSettings()).toEqual({ sound: false, haptics: true });
+  });
+
+  it('defaults both toggles to true when missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadSettings()).toEqual({ sound: true, haptics: true });
+  });
+
+  it('falls back to defaults on corrupt JSON / partial values', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(SETTINGS_KEY, '{not json');
+    expect(loadSettings()).toEqual({ sound: true, haptics: true });
+    map.set(SETTINGS_KEY, JSON.stringify({ sound: false }));
+    expect(loadSettings()).toEqual({ sound: false, haptics: true });
+  });
+
+  it('defaults without throwing when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadSettings()).not.toThrow();
+    expect(loadSettings()).toEqual({ sound: true, haptics: true });
+    expect(() => saveSettings({ sound: false, haptics: false })).not.toThrow();
+  });
+});
+
+describe('stats', () => {
+  const STATS_KEY = 'wbp.v1.stats';
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips stats', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveStats({ gamesPlayed: 3, totalLines: 42, bestStreak: 5, bestScore: 999 });
+    expect(loadStats()).toEqual({ gamesPlayed: 3, totalLines: 42, bestStreak: 5, bestScore: 999 });
+  });
+
+  it('defaults all fields to 0 when missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadStats()).toEqual({ gamesPlayed: 0, totalLines: 0, bestStreak: 0, bestScore: 0 });
+  });
+
+  it('clamps corrupt / negative / non-integer fields to 0', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(STATS_KEY, JSON.stringify({ gamesPlayed: -1, totalLines: 2.5, bestStreak: 'x', bestScore: 10 }));
+    expect(loadStats()).toEqual({ gamesPlayed: 0, totalLines: 0, bestStreak: 0, bestScore: 10 });
+    map.set(STATS_KEY, 'garbage');
+    expect(loadStats()).toEqual({ gamesPlayed: 0, totalLines: 0, bestStreak: 0, bestScore: 0 });
+  });
+
+  it('defaults without throwing when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadStats()).not.toThrow();
+    expect(loadStats()).toEqual({ gamesPlayed: 0, totalLines: 0, bestStreak: 0, bestScore: 0 });
+    expect(() => saveStats({ gamesPlayed: 1, totalLines: 1, bestStreak: 1, bestScore: 1 })).not.toThrow();
+  });
+});
+
+describe('seen-intro flag', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips the seen-intro flag', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    expect(loadSeenIntro()).toBe(false);
+    saveSeenIntro();
+    expect(loadSeenIntro()).toBe(true);
+  });
+
+  it('defaults to false when missing or unavailable', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadSeenIntro()).toBe(false);
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadSeenIntro()).not.toThrow();
+    expect(loadSeenIntro()).toBe(false);
   });
 });

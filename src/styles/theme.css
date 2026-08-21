@@ -176,6 +176,19 @@ body {
   color: var(--text-dim);
 }
 
+/* Small secondary actions under the home menu (settings / stats / how-to). */
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.home-actions .btn {
+  font-size: 13px;
+  padding: 8px 16px;
+}
+
 /* ---- Install affordance (home screen) ---- */
 .install-affordance {
   min-height: 44px;

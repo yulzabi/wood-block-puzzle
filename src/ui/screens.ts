@@ -7,13 +7,17 @@
  * this module owns only the frame and the show/hide transitions.
  */
 
-export type ScreenName = 'home' | 'game' | 'gameover';
+import type { Settings, Stats } from '../platform/storage';
+
+export type ScreenName = 'home' | 'game' | 'gameover' | 'overlay';
 
 export interface Screens {
   readonly frame: HTMLElement;
   readonly home: HTMLElement;
   readonly game: HTMLElement;
   readonly gameover: HTMLElement;
+  /** Generic modal overlay surface (settings / stats / first-run intro). */
+  readonly overlay: HTMLElement;
   show(name: ScreenName): void;
 }
 
@@ -34,16 +38,21 @@ export function createScreens(root: HTMLElement): Screens {
   gameover.id = 'screen-gameover';
   gameover.hidden = true;
 
-  frame.append(home, game, gameover);
+  const overlay = el('section', 'screen');
+  overlay.id = 'screen-overlay';
+  overlay.hidden = true;
+
+  frame.append(home, game, gameover, overlay);
   root.append(frame);
 
-  const map: Record<ScreenName, HTMLElement> = { home, game, gameover };
+  const map: Record<ScreenName, HTMLElement> = { home, game, gameover, overlay };
 
   return {
     frame,
     home,
     game,
     gameover,
+    overlay,
     show(name: ScreenName): void {
       (Object.keys(map) as ScreenName[]).forEach((key) => {
         map[key].hidden = key !== name;
@@ -184,6 +193,9 @@ export interface HomeOpts {
   onEndless(): void;
   /** The level the player will resume at (shown as a hint). */
   currentLevel: number;
+  onSettings(): void;
+  onStats(): void;
+  onHowTo(): void;
 }
 
 /** Populate the home screen (title + a mode menu: Levels / Endless). */
@@ -215,7 +227,208 @@ export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   const hint = el('p', 'home-hint');
   hint.textContent = `Levels resume at level ${opts.currentLevel}`;
 
-  home.append(title, subtitle, menu, hint);
+  const actions = el('div', 'home-actions');
+  actions.append(
+    ghostButton('⚙ Settings', opts.onSettings),
+    ghostButton('Stats', opts.onStats),
+    ghostButton('How to play', opts.onHowTo),
+  );
+
+  home.append(title, subtitle, menu, hint, actions);
+}
+
+/** A small ghost button used in the home action row / overlays. */
+function ghostButton(label: string, onClick: () => void): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'btn btn--ghost';
+  b.type = 'button';
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+/**
+ * Wire modal-overlay dismissal: Escape closes, and the returned cleanup detaches
+ * the key listener. Focuses the first focusable control for keyboard users.
+ */
+function wireOverlay(panel: HTMLElement, onClose: () => void): void {
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      window.removeEventListener('keydown', onKey);
+      onClose();
+    }
+  };
+  window.addEventListener('keydown', onKey);
+  // Wrap any close callers so the listener is always removed.
+  panel.dataset['overlay'] = '1';
+  const first = panel.querySelector<HTMLElement>('button, [tabindex]');
+  if (first) first.focus();
+  // Expose a cleanup on the panel so button handlers can detach the listener.
+  (panel as HTMLElement & { _cleanup?: () => void })._cleanup = () =>
+    window.removeEventListener('keydown', onKey);
+}
+
+/** Options for the settings panel. */
+export interface SettingsOpts {
+  settings: Settings;
+  onChange(next: Settings): void;
+  onClose(): void;
+}
+
+/** Populate the settings overlay: Sound + Haptics toggles, persisted immediately. */
+export function renderSettings(overlay: HTMLElement, opts: SettingsOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+  const current: Settings = { ...opts.settings };
+
+  const panel = el('div', 'gameover-panel settings-panel');
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'Settings';
+
+  const toggles = el('div', 'settings-toggles');
+  const soundBtn = toggleButton('Sound', current.sound, (on) => {
+    current.sound = on;
+    opts.onChange({ ...current });
+  });
+  const hapticsBtn = toggleButton('Haptics', current.haptics, (on) => {
+    current.haptics = on;
+    opts.onChange({ ...current });
+  });
+  toggles.append(soundBtn, hapticsBtn);
+
+  const done = document.createElement('button');
+  done.className = 'btn btn--primary';
+  done.type = 'button';
+  done.textContent = 'Done';
+  done.addEventListener('click', () => close());
+
+  function close(): void {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onClose();
+  }
+
+  panel.append(title, toggles, done);
+  overlay.append(panel);
+  replayEnter(panel);
+  wireOverlay(panel, close);
+}
+
+/** A labeled on/off toggle rendered as an aria-pressed button. */
+function toggleButton(
+  label: string,
+  initial: boolean,
+  onToggle: (on: boolean) => void,
+): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.className = 'btn btn--ghost toggle';
+  b.type = 'button';
+  let on = initial;
+  const paint = (): void => {
+    b.setAttribute('aria-pressed', String(on));
+    b.classList.toggle('toggle--on', on);
+    b.textContent = `${label}: ${on ? 'On' : 'Off'}`;
+  };
+  paint();
+  b.addEventListener('click', () => {
+    on = !on;
+    paint();
+    onToggle(on);
+  });
+  return b;
+}
+
+/** Options for the stats overlay. */
+export interface StatsOpts {
+  stats: Stats;
+  onClose(): void;
+}
+
+/** Populate the stats overlay (games played, lines, best streak, best score). */
+export function renderStats(overlay: HTMLElement, opts: StatsOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel');
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'Stats';
+
+  const grid = el('div', 'stats-grid');
+  grid.append(
+    statBox('Games', opts.stats.gamesPlayed),
+    statBox('Lines', opts.stats.totalLines),
+    statBox('Best streak', opts.stats.bestStreak),
+    statBox('Best score', opts.stats.bestScore),
+  );
+
+  const done = document.createElement('button');
+  done.className = 'btn btn--primary';
+  done.type = 'button';
+  done.textContent = 'Close';
+  done.addEventListener('click', () => close());
+
+  function close(): void {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onClose();
+  }
+
+  panel.append(title, grid, done);
+  overlay.append(panel);
+  replayEnter(panel);
+  wireOverlay(panel, close);
+}
+
+function statBox(label: string, value: number): HTMLElement {
+  const box = el('div', 'stat-box');
+  const v = el('p', 'stat-value');
+  v.textContent = String(value);
+  const l = el('p', 'stat-label');
+  l.textContent = label;
+  box.append(v, l);
+  return box;
+}
+
+/** Options for the first-run intro overlay. */
+export interface IntroOpts {
+  onDismiss(): void;
+}
+
+/** Populate the "How to play" overlay with 3 short steps. */
+export function renderIntro(overlay: HTMLElement, opts: IntroOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel intro-panel');
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'How to play';
+
+  const steps = document.createElement('ol');
+  steps.className = 'intro-steps';
+  for (const text of [
+    'Drag a piece from the tray onto the board.',
+    'Fill a full row or column to clear it and score.',
+    'No room for any piece? The game ends — plan ahead!',
+  ]) {
+    const li = document.createElement('li');
+    li.textContent = text;
+    steps.append(li);
+  }
+
+  const done = document.createElement('button');
+  done.className = 'btn btn--primary';
+  done.type = 'button';
+  done.textContent = 'Got it';
+  done.addEventListener('click', () => close());
+
+  function close(): void {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onDismiss();
+  }
+
+  panel.append(title, steps, done);
+  overlay.append(panel);
+  replayEnter(panel);
+  wireOverlay(panel, close);
 }
 
 /** Options for the level-complete overlay. */
