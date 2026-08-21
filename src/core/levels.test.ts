@@ -66,9 +66,11 @@ describe('generateLevel — score goal (level 1)', () => {
   });
 });
 
-describe('generateLevel — gem goal (level 2+)', () => {
-  it('is deterministic per level number (board/gems/quotas/supply/goalType)', () => {
-    for (const n of [2, 5, 20, 60]) {
+describe('generateLevel — replay determinism', () => {
+  it('returns an identical level (board + gems + quotas + supply + goalType + targetScore) across calls', () => {
+    // "Replay level N" is guaranteed by regeneration — the full result tuple
+    // must be byte-identical for the same level number, score and gem levels.
+    for (const n of [1, 2, 5, 20, 60]) {
       const a = generateLevel(n);
       const b = generateLevel(n);
       expect(Array.from(a.board)).toEqual(Array.from(b.board));
@@ -79,7 +81,9 @@ describe('generateLevel — gem goal (level 2+)', () => {
       expect(a.targetScore).toBe(b.targetScore);
     }
   });
+});
 
+describe('generateLevel — gem goal (level 2+)', () => {
   it('produces different starts for different levels', () => {
     expect(Array.from(generateLevel(2).board)).not.toEqual(Array.from(generateLevel(3).board));
   });
