@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lineClearScore, placementScore } from './scoring';
+import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 
 describe('placementScore', () => {
   it('is one point per placed cell', () => {
@@ -22,5 +22,25 @@ describe('lineClearScore', () => {
   it('is 0 when no lines clear', () => {
     expect(lineClearScore(0)).toBe(0);
     expect(lineClearScore(-3)).toBe(0);
+  });
+});
+
+describe('streakMultiplier', () => {
+  it('is 1 for the first clear (streak 0 or 1)', () => {
+    expect(streakMultiplier(0)).toBe(1);
+    expect(streakMultiplier(1)).toBe(1);
+  });
+
+  it('adds 0.5 per consecutive clear', () => {
+    expect(streakMultiplier(2)).toBe(1.5);
+    expect(streakMultiplier(3)).toBe(2);
+    expect(streakMultiplier(4)).toBe(2.5);
+    expect(streakMultiplier(5)).toBe(3);
+    expect(streakMultiplier(6)).toBe(3.5);
+  });
+
+  it('caps at 4', () => {
+    expect(streakMultiplier(7)).toBe(4);
+    expect(streakMultiplier(20)).toBe(4);
   });
 });

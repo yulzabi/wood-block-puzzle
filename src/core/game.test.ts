@@ -10,6 +10,7 @@ import {
   startGame,
 } from './game';
 import { generateLevel } from './levels';
+import { generatePieces } from './pieces';
 import { createBoard, idx } from './board';
 import { makeShape } from './shapes';
 import { BOARD_SIZE, TRAY_SIZE } from './types';
@@ -23,15 +24,23 @@ function piece(id: string, shape: Shape, material = 1, placed = false): Piece {
   return { id, shape, material, placed };
 }
 
-function playing(board: Uint8Array, tray: Piece[], score = 0, highScore = 0): GameState {
+function playing(
+  board: Uint8Array,
+  tray: Piece[],
+  score = 0,
+  highScore = 0,
+  streak = 0,
+  rngState = 123456789,
+): GameState {
   return {
     board,
     tray,
     score,
     highScore,
     status: 'playing',
-    rngState: 123456789,
+    rngState,
     pieceSeq: tray.length,
+    streak,
     mode: 'endless',
     level: 0,
     targetScore: 0,
@@ -60,6 +69,7 @@ function levelsState(opts: {
     status: 'playing',
     rngState: 123456789,
     pieceSeq: opts.tray.length,
+    streak: 0,
     mode: 'levels',
     level: opts.level ?? 1,
     targetScore: opts.targetScore ?? 100,
@@ -122,7 +132,7 @@ describe('applyMove — line clearing', () => {
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
 
     expect(res.ok).toBe(true);
-    expect(types(res.events)).toEqual(['placed', 'cleared', 'scored', 'scored']);
+    expect(types(res.events)).toEqual(['placed', 'cleared', 'scored', 'scored', 'combo']);
 
     const cleared = res.events.find((e) => e.type === 'cleared');
     expect(cleared).toMatchObject({ rows: [0], cols: [] });
@@ -229,6 +239,7 @@ describe('restart', () => {
       status: 'gameover',
       rngState: 987654321,
       pieceSeq: 9,
+      streak: 0,
       mode: 'endless',
       level: 0,
       targetScore: 0,
@@ -349,5 +360,110 @@ describe('levels — applyMove resolution', () => {
     expect(res.state.status).toBe('levelfailed');
     expect(types(res.events)).toContain('levelfailed');
     expect(res.events.find((e) => e.type === 'levelfailed')).toMatchObject({ level: 3 });
+  });
+});
+
+describe('applyMove — streak / combo', () => {
+  it('starts a streak at 1 on the first clear and emits a combo event', () => {
+    const board = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
+    const state = playing(board, [piece('s', single, 4), piece('z', square2, 5)]);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
+
+    expect(res.state.streak).toBe(1);
+    expect(res.events.find((e) => e.type === 'combo')).toMatchObject({ streak: 1, multiplier: 1, lines: 1 });
+    // first clear: bonus = round(10 * 1) = 10
+    expect(res.events.find((e) => e.type === 'scored' && e.kind === 'clear')).toMatchObject({ delta: 10 });
+  });
+
+  it('multiplies the clear bonus by the streak multiplier', () => {
+    const board = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
+    // Enter with streak 2 so this clear makes it 3 -> multiplier 2.
+    const state = playing(board, [piece('s', single, 4), piece('z', square2, 5)], 0, 0, 2);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
+
+    expect(res.state.streak).toBe(3);
+    expect(res.events.find((e) => e.type === 'combo')).toMatchObject({ streak: 3, multiplier: 2, lines: 1 });
+    // clear bonus = round(10 * 2) = 20; total = placement(1) + 20 = 21
+    expect(res.events.find((e) => e.type === 'scored' && e.kind === 'clear')).toMatchObject({ delta: 20, total: 21 });
+    expect(res.state.score).toBe(21);
+  });
+
+  it('resets the streak to 0 on a placement that clears nothing (no combo event)', () => {
+    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 50, 50, 5);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 4, col: 4 } });
+
+    expect(res.state.streak).toBe(0);
+    expect(types(res.events)).not.toContain('combo');
+    expect(types(res.events)).not.toContain('cleared');
+  });
+});
+
+describe('applyMove — a refill can immediately end the game', () => {
+  // Board filled except isolated (non-adjacent) empties — two per row/col spaced 4
+  // apart — so ONLY a 1x1 `single` can ever be placed here.
+  const isolatedBoard = (): Uint8Array => {
+    const b = new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      b[idx(r, r)] = 0;
+      b[idx(r, (r + 4) % BOARD_SIZE)] = 0;
+    }
+    return b;
+  };
+  // An rngState whose next 3-piece deal contains no `single` (the only shape that
+  // could fit the isolated board), so the refill is guaranteed unplaceable.
+  const noSingleRng = (): number => {
+    for (let s = 1; s < 1_000_000; s++) {
+      const { pieces } = generatePieces(s, 0, TRAY_SIZE);
+      if (pieces.every((p) => p.shape.id !== 'single')) return s;
+    }
+    throw new Error('no no-single rng found');
+  };
+
+  it('endless: exhausting the tray into an unplaceable refill ends in gameover', () => {
+    const tray = [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)];
+    const state = playing(isolatedBoard(), tray, 0, 0, 0, noSingleRng());
+
+    // Place the last piece in an isolated empty: no line completes, so no clear.
+    const res = applyMove(state, { type: 'place', pieceId: 'c', at: { row: 0, col: 0 } });
+
+    expect(res.ok).toBe(true);
+    expect(types(res.events)).toContain('refill');
+    expect(types(res.events)).not.toContain('cleared');
+    expect(res.state.tray.every((p) => !p.placed)).toBe(true); // the fresh, unplaceable hand
+    expect(res.state.status).toBe('gameover');
+    expect(types(res.events)).toContain('gameover');
+  });
+
+  it('levels: an unplaceable refill fails the level', () => {
+    const targets = createBoard();
+    targets[idx(2, 2)] = 1; // a target on a filled cell -> survives, so not complete
+    const tray = [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)];
+    const state: GameState = {
+      board: isolatedBoard(),
+      tray,
+      score: 0,
+      highScore: 0,
+      status: 'playing',
+      rngState: noSingleRng(),
+      pieceSeq: tray.length,
+      streak: 0,
+      mode: 'levels',
+      level: 4,
+      targetScore: 9999,
+      targets,
+      targetsTotal: 1,
+    };
+
+    const res = applyMove(state, { type: 'place', pieceId: 'c', at: { row: 0, col: 0 } });
+
+    expect(res.ok).toBe(true);
+    expect(types(res.events)).toContain('refill');
+    expect(res.state.status).toBe('levelfailed');
+    expect(types(res.events)).toContain('levelfailed');
   });
 });

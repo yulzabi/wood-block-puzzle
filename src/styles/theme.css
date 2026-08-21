@@ -220,3 +220,25 @@ body {
     animation: none;
   }
 }
+
+/* ---- Accessibility ---- */
+
+/* Visually hidden but available to screen readers (live region). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Visible focus ring for keyboard users (mouse/touch don't trigger it). */
+:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 2px;
+}

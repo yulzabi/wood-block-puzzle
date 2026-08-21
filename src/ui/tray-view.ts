@@ -14,6 +14,23 @@ import { TRAY_SIZE } from '../core/types';
 export const TRAY_CELL = 22;
 export const TRAY_GAP = 4;
 
+/** A human-readable name for a shape, for screen-reader labels. */
+export function describePiece(shape: Shape): string {
+  const n = shape.size;
+  const cells = n === 1 ? 'cell' : 'cells';
+  const id = shape.id;
+  let name: string;
+  if (id === 'single') name = 'single block';
+  else if (id.startsWith('line')) name = shape.width > shape.height ? 'horizontal line' : 'vertical line';
+  else if (id.startsWith('square')) name = 'square';
+  else if (id.startsWith('T-')) name = 'T-shape';
+  else if (id.startsWith('S-')) name = 'S-shape';
+  else if (id.startsWith('Z-')) name = 'Z-shape';
+  else if (id.startsWith('corner') || id.startsWith('bigL') || id === 'J4' || id === 'L4') name = 'L-shape';
+  else name = 'block';
+  return `${name}, ${n} ${cells}`;
+}
+
 /** Build a grid of wood blocks laid out to a shape (reused for the drag ghost). */
 export function buildPieceGrid(
   shape: Shape,
@@ -65,6 +82,9 @@ export class TrayView {
       const pieceEl = document.createElement('div');
       pieceEl.className = 'tray-piece';
       pieceEl.dataset['pieceId'] = piece.id;
+      pieceEl.tabIndex = 0;
+      pieceEl.setAttribute('role', 'button');
+      pieceEl.setAttribute('aria-label', describePiece(piece.shape));
       pieceEl.append(buildPieceGrid(piece.shape, piece.material, TRAY_CELL, TRAY_GAP));
       slot.append(pieceEl);
     }

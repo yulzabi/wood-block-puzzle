@@ -37,6 +37,8 @@ export interface DragConfig {
 
 interface DragSession {
   readonly piece: Piece;
+  /** The tray-piece element the move/up/cancel listeners are bound to. */
+  readonly el: HTMLElement;
   readonly pointerId: number;
   readonly ghost: HTMLElement;
   /** Grabbed shape cell (relative offset). */
@@ -104,6 +106,7 @@ export class DragController {
 
     this.session = {
       piece,
+      el: pieceEl,
       pointerId: e.pointerId,
       ghost,
       anchor,
@@ -135,16 +138,16 @@ export class DragController {
     const commit = s.origin !== null && s.valid;
     if (commit && s.origin) {
       this.cfg.onPlace({ type: 'place', pieceId: s.piece.id, at: s.origin });
-      this.endSession(e, false);
+      this.endSession(false);
     } else {
-      this.endSession(e, true);
+      this.endSession(true);
     }
     e.preventDefault();
   };
 
   private readonly onPointerCancel = (e: PointerEvent): void => {
     if (!this.session || e.pointerId !== this.session.pointerId) return;
-    this.endSession(e, true);
+    this.endSession(true);
   };
 
   /** Recompute origin + preview and move the ghost. */
@@ -203,22 +206,23 @@ export class DragController {
     return best;
   }
 
-  private endSession(e: PointerEvent, animateBack: boolean): void {
+  private endSession(animateBack: boolean): void {
     const s = this.session;
     if (!s) return;
     this.session = null;
 
-    const el = e.currentTarget as HTMLElement | null;
-    if (el) {
-      el.removeEventListener('pointermove', this.onPointerMove);
-      el.removeEventListener('pointerup', this.onPointerUp);
-      el.removeEventListener('pointercancel', this.onPointerCancel);
-      el.removeEventListener('lostpointercapture', this.onPointerCancel);
-      try {
-        el.releasePointerCapture(s.pointerId);
-      } catch {
-        // ignore
-      }
+    // Remove listeners from the element they were bound to at pickup — NOT from
+    // e.currentTarget, which is null on pointercancel/lostpointercapture and
+    // would otherwise leak listeners onto re-rendered tray pieces.
+    const el = s.el;
+    el.removeEventListener('pointermove', this.onPointerMove);
+    el.removeEventListener('pointerup', this.onPointerUp);
+    el.removeEventListener('pointercancel', this.onPointerCancel);
+    el.removeEventListener('lostpointercapture', this.onPointerCancel);
+    try {
+      el.releasePointerCapture(s.pointerId);
+    } catch {
+      // ignore
     }
 
     this.cfg.boardView.clearPreview();

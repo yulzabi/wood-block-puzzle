@@ -110,6 +110,33 @@ export class HUD {
     // Safety net in case animationend never fires.
     window.setTimeout(() => pop.remove(), 1200);
   }
+
+  /**
+   * Float a "STREAK ×N" combo indicator from a client-space point. Distinct from
+   * the "+N" score pop; only meaningful for streak >= 2.
+   */
+  popCombo(streak: number, multiplier: number, at: { x: number; y: number }): void {
+    if (streak < 2) return;
+    const pop = document.createElement('div');
+    pop.className = 'combo-pop';
+    const mult = document.createElement('span');
+    mult.className = 'combo-pop-mult';
+    mult.textContent = `×${formatMultiplier(multiplier)}`;
+    const label = document.createElement('span');
+    label.className = 'combo-pop-label';
+    label.textContent = `STREAK ${streak}`;
+    pop.append(mult, label);
+    pop.style.left = `${at.x}px`;
+    pop.style.top = `${at.y}px`;
+    document.body.append(pop);
+    pop.addEventListener('animationend', () => pop.remove(), { once: true });
+    window.setTimeout(() => pop.remove(), 1400);
+  }
+}
+
+/** Format a score multiplier: 2 -> "2", 1.5 -> "1.5". */
+export function formatMultiplier(m: number): string {
+  return Number.isInteger(m) ? String(m) : m.toFixed(1);
 }
 
 /** Build a HUD row (a flex line of boxes). */

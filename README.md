@@ -2,18 +2,33 @@
 
 A cozy, wood-themed **block-placement puzzle** (in the spirit of *1010!* / *Block Blast!*), built as an **installable Progressive Web App**. It runs in any modern desktop browser, installs to the home screen on iOS and Android, and — after the first load — works **fully offline**. No backend, no ads, no accounts, no tracking.
 
-Live demo: `https://<user>.github.io/<repo>/` *(fill in after deploying — see [Deployment](#deployment))*
+Two modes: **Endless** (survive as long as your pieces keep fitting) and **Levels** (clear the pre-placed target blocks *and* reach a target score to advance). Playable by **mouse/touch drag or keyboard**.
+
+Live demo: **https://yulzabi.github.io/wood-block-puzzle/**
 
 ---
 
 ## How to play
 
-- The board is an **8×8 grid**. Below it, a **tray of 3 pieces** (wood-block polyominoes — singles, lines, squares, L/T/S/Z shapes).
-- **Drag** a piece onto the board. It only fits where all its cells land on empty cells (a green preview means valid, red means blocked). Pieces **don't rotate**.
+- The board is an **8×8 grid**. Below it, a **tray of 3 pieces** (wood-block polyominoes — singles, lines, squares, L/T/S/Z shapes). Pieces **don't rotate**.
+- Place a piece where all its cells land on empty cells (a green preview means valid, red means blocked). When the tray empties, you get **3 new pieces**.
 - Fill a **whole row or column** (all 8 cells) to **clear** it. Clear **several lines at once** for a big bonus.
-- **Scoring:** `+1` per placed cell, plus a line-clear bonus of `10 × k(k+1)/2` for `k` lines cleared at once → **1 line = 10, 2 = 30, 3 = 60, 4 = 100**.
-- When the tray empties, you get **3 new pieces**.
-- **Game over** when none of your 3 pieces fit anywhere. Your **high score** is saved on your device.
+
+**Controls**
+
+- **Mouse / touch:** drag a piece from the tray onto the board and release.
+- **Keyboard:** `Tab` to a tray piece, `Enter`/`Space` to pick it up, **arrow keys** to move it on the board, `Enter`/`Space` to drop, `Esc` to cancel.
+
+**Scoring**
+
+- `+1` per placed cell.
+- **Simultaneous multi-line bonus:** `10 × k(k+1)/2` for `k` lines cleared at once → **1 line = 10, 2 = 30, 3 = 60, 4 = 100**.
+- **Streak multiplier:** consecutive line-clearing placements build a streak that multiplies the clear bonus — `1 + 0.5·(streak−1)`, capped at **×4** (streak 2 = ×1.5, 3 = ×2, …). A placement that clears nothing resets the streak.
+
+**Modes**
+
+- **Endless:** play until none of your 3 pieces fit anywhere. Your **high score** is saved on your device.
+- **Levels:** each level starts with **pre-placed target blocks** (ringed) that you clear by completing their rows/columns. Beat a level by clearing **all** target blocks **and** reaching the level's **target score** (both required). Levels are procedurally generated and get harder (more blocks, higher target) as you progress; hitting a dead-end lets you **retry** the level. Your current level is saved on your device.
 
 ---
 
@@ -62,10 +77,10 @@ Clean separation between a **pure, framework-free game core** and a thin **prese
 
 ```
 src/
-  core/       # PURE game logic (no DOM): types, shapes, rng, board, pieces, scoring, game engine
+  core/       # PURE game logic (no DOM): types, shapes, rng, board, pieces, scoring, levels, game engine
   ui/         # DOM rendering: board, tray, HUD, screens
-  input/      # Pointer-Events drag-and-drop controller
-  platform/   # localStorage high score, haptics, install controller
+  input/      # drag-and-drop (Pointer Events) + keyboard placement controllers
+  platform/   # localStorage (high score + level progress), haptics, install controller
   styles/     # wood theme tokens + in-game styles
   app.ts      # orchestrator: wires the engine's events to the views
 scripts/      # icon generation + Lighthouse runner
@@ -73,7 +88,9 @@ scripts/      # icon generation + Lighthouse runner
 
 - **Stack:** TypeScript + Vite + Vitest, `vite-plugin-pwa` (Workbox) for the manifest + service worker.
 - **Rendering:** DOM elements animated with GPU-friendly CSS `transform`/`opacity` (60fps drag; no canvas needed).
-- **Engine:** an immutable reducer — `applyMove(state, move)` returns a new state plus semantic events (`placed`, `cleared`, `scored`, `refill`, `gameover`) that the UI animates. A seedable RNG makes piece generation deterministic for tests.
+- **Engine:** an immutable reducer — `applyMove(state, move)` returns a new state plus semantic events (`placed`, `cleared`, `scored`, `combo`, `refill`, `gameover`, `levelcomplete`, `levelfailed`) that the UI animates and announces. A seedable RNG makes piece generation and level layouts deterministic for tests.
+- **Persistence:** high score (`wbp.v1.highscore`) and Levels progress (`wbp.v1.level`) in `localStorage`, both read/written through fail-safe wrappers.
+- **Accessibility:** the board is an ARIA `grid` of labeled `gridcell`s, tray pieces are focusable labeled buttons, a full keyboard placement path mirrors the pointer flow, and an `aria-live` region announces scores, clears/streaks, and level/game-over outcomes.
 
 ---
 
@@ -81,7 +98,7 @@ scripts/      # icon generation + Lighthouse runner
 
 **Automated (in this repo):**
 
-- ✅ **Unit tests — 79 passing** across the core + platform (placement validation, line clearing, scoring, game-over detection, piece generation, RNG determinism, storage safety, and the pure drag/geometry helpers). Run `npm test`.
+- ✅ **Unit tests — 105 passing** across the core + platform (placement validation, line clearing, scoring + streak multiplier, game-over/level-complete/level-failed detection, level generation, piece generation, RNG determinism, storage safety, and the pure drag/geometry helpers). Run `npm test`.
 - ✅ **Type safety** — strict `tsc --noEmit` passes.
 - ✅ **Lighthouse + PWA check** (`npm run lighthouse`) on the production build via headless Chrome. Latest local result:
 
@@ -89,13 +106,15 @@ scripts/      # icon generation + Lighthouse runner
   | --- | --- |
   | Performance | **100** |
   | Best Practices | **96** |
+  | Accessibility | **93** |
   | SEO | **91** |
-  | Accessibility | **86** |
 
   - **Installability:** ✅ PASS — valid installable manifest (name, `start_url`, `standalone`, 192 + 512 + maskable icons) and a reachable service worker.
   - **Offline:** ✅ PASS — **15 assets precached** (HTML, JS, CSS, icons), so the app loads and plays with no network.
 
   > Note: Lighthouse **≥ 12 removed the dedicated "PWA" category** and its installability/offline audits. This project therefore reports the standard Lighthouse scores **and** verifies installability + offline explicitly against the served build (the same criteria the old audits used). See `scripts/run-lighthouse.mjs`.
+
+  > **Deliberate accessibility tradeoff:** the viewport is set with `maximum-scale=1, user-scalable=no` to disable pinch-zoom and give the installed game a native, non-scrolling feel. This is an intentional choice for a full-screen game (Lighthouse/axe may flag it), and it's offset by full keyboard play and ARIA labeling.
 
 **Requires a real device / manual check (can't be automated headlessly):**
 

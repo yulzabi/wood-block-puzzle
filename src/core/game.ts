@@ -3,7 +3,7 @@
  *
  * `applyMove` returns a NEW state plus an ordered list of semantic events for
  * the UI to animate. It never mutates its input. Event order for a valid move:
- *   placed, [cleared], scored (x1-2), [refill], [gameover].
+ *   placed, [cleared], scored (x1-2), [combo], [refill], [gameover/levelcomplete/levelfailed].
  */
 
 import type { Coord, GameEvent, GameState, GameStatus, Move, MoveResult, Piece, RejectReason } from './types';
@@ -11,7 +11,7 @@ import { TRAY_SIZE } from './types';
 import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, idx, inBounds, place } from './board';
 import { generatePieces } from './pieces';
 import { generateLevel } from './levels';
-import { lineClearScore, placementScore } from './scoring';
+import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 import { seedState } from './rng';
 
 /** Count the set cells in a 0/1 mask. */
@@ -31,6 +31,7 @@ export function newGame(seed: number, highScore: number): GameState {
     status: 'home',
     rngState: seedState(seed),
     pieceSeq: 0,
+    streak: 0,
     mode: 'endless',
     level: 0,
     targetScore: 0,
@@ -50,6 +51,7 @@ function beginPlaying(state: GameState): GameState {
     status: 'playing',
     rngState,
     pieceSeq: nextSeq,
+    streak: 0,
     mode: 'endless',
     level: 0,
     targetScore: 0,
@@ -70,6 +72,7 @@ function beginLevel(state: GameState, level: number): GameState {
     status: 'playing',
     rngState,
     pieceSeq: nextSeq,
+    streak: 0,
     mode: 'levels',
     level,
     targetScore: gen.targetScore,
@@ -156,17 +159,23 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'cleared', rows, cols, cells: cleared.cells });
   }
 
-  // 3. Score: placement first, then the line-clear bonus.
+  // 3. Streak (strike): clearing lines on consecutive placements builds a streak
+  //    that multiplies the line-clear bonus; a no-clear placement resets it.
+  const streak = lineCount > 0 ? state.streak + 1 : 0;
+
+  // 4. Score: placement first, then the streak-multiplied line-clear bonus.
   const placementPts = placementScore(piece.shape.size);
   let score = state.score + placementPts;
   events.push({ type: 'scored', delta: placementPts, total: score, kind: 'placement' });
   if (lineCount > 0) {
-    const clearPts = lineClearScore(lineCount);
+    const multiplier = streakMultiplier(streak);
+    const clearPts = Math.round(lineClearScore(lineCount) * multiplier);
     score += clearPts;
     events.push({ type: 'scored', delta: clearPts, total: score, kind: 'clear' });
+    events.push({ type: 'combo', streak, multiplier, lines: lineCount });
   }
 
-  // 4. Mark the piece placed; refill when the whole tray is exhausted.
+  // 5. Mark the piece placed; refill when the whole tray is exhausted.
   let tray: Piece[] = state.tray.map((p) => (p.id === move.pieceId ? { ...p, placed: true } : p));
   let rngState = state.rngState;
   let pieceSeq = state.pieceSeq;
@@ -178,15 +187,15 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'refill', pieces: refill.pieces });
   }
 
-  // 5. High score.
+  // 6. High score.
   const highScore = Math.max(state.highScore, score);
 
-  // 6. Update the target mask: any cleared cell that was a target is now gone.
+  // 7. Update the target mask: any cleared cell that was a target is now gone.
   const targets = state.targets.slice();
   for (const c of clearedCells) targets[idx(c.row, c.col)] = 0;
   const targetsRemaining = countMask(targets);
 
-  // 7. Resolve end-of-move status per mode (against the post-refill tray).
+  // 8. Resolve end-of-move status per mode (against the post-refill tray).
   const unplaced = tray.filter((p) => !p.placed);
   const deadEnd = unplaced.length > 0 && unplaced.every((p) => !hasAnyPlacement(board, p.shape));
 
@@ -215,6 +224,7 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       status,
       rngState,
       pieceSeq,
+      streak,
       mode: state.mode,
       level: state.level,
       targetScore: state.targetScore,

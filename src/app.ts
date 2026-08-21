@@ -41,8 +41,9 @@ import {
 } from './ui/screens';
 import { BoardView } from './ui/board-view';
 import { TrayView } from './ui/tray-view';
-import { HUD } from './ui/hud';
+import { HUD, formatMultiplier } from './ui/hud';
 import { DragController } from './input/drag-controller';
+import { KeyboardController } from './input/keyboard-controller';
 
 export class App {
   private readonly screens: Screens;
@@ -50,14 +51,24 @@ export class App {
   private readonly trayView: TrayView;
   private readonly hud: HUD;
   private readonly drag: DragController;
+  private readonly keyboard: KeyboardController;
   private readonly install: InstallController;
   private readonly installAffordance: InstallAffordance | null;
+  private readonly live: HTMLElement;
   private state: GameState;
 
   constructor(root: HTMLElement) {
     this.screens = createScreens(root);
     this.install = createInstallController();
     this.install.init();
+
+    // Visually-hidden live region for screen-reader announcements.
+    this.live = document.createElement('div');
+    this.live.className = 'sr-only';
+    this.live.setAttribute('role', 'status');
+    this.live.setAttribute('aria-live', 'polite');
+    this.live.setAttribute('aria-atomic', 'true');
+    root.append(this.live);
 
     // Build the install affordance once; it's re-appended each time we render home.
     this.installAffordance = renderInstallAffordance(this.install, () => {
@@ -91,6 +102,16 @@ export class App {
     });
     this.drag.attach();
 
+    this.keyboard = new KeyboardController({
+      trayEl: this.trayView.el,
+      boardView: this.boardView,
+      getPieces: () => this.state.tray,
+      canPlaceAt: (shape, at) => canPlace(this.state.board, shape, at),
+      onPlace: (move) => this.handlePlace(move),
+      announce: (msg) => this.announce(msg),
+    });
+    this.keyboard.attach();
+
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
     this.screens.show('home');
@@ -123,7 +144,25 @@ export class App {
     this.hud.reset();
     this.renderAll();
     this.screens.show('game');
-    this.drag.setInteractive(true);
+    this.setInteractive(true);
+    if (this.state.mode === 'levels') {
+      this.announce(
+        `Level ${this.state.level}. Clear ${this.state.targetsTotal} blocks and reach ${this.state.targetScore} points.`,
+      );
+    } else {
+      this.announce('Endless mode. Place pieces to clear lines.');
+    }
+  }
+
+  /** Enable/disable both pointer and keyboard placement together. */
+  private setInteractive(enabled: boolean): void {
+    this.drag.setInteractive(enabled);
+    this.keyboard.setInteractive(enabled);
+  }
+
+  /** Push a message to the screen-reader live region. */
+  private announce(message: string): void {
+    this.live.textContent = message;
   }
 
   private renderAll(): void {
@@ -165,7 +204,7 @@ export class App {
     if (!res.ok) return;
 
     this.state = res.state;
-    this.drag.setInteractive(false);
+    this.setInteractive(false);
 
     // Reflect the new board/tray truth first, then animate the events.
     this.boardView.renderBoard(
@@ -174,7 +213,10 @@ export class App {
     );
     this.trayView.renderTray(this.state.tray);
 
-    let popAt: { x: number; y: number } | null = null;
+    let placedAt: { x: number; y: number } | null = null;
+    let clearedAt: { x: number; y: number } | null = null;
+    let linesCleared = 0;
+    let combo: { streak: number; multiplier: number } | null = null;
 
     for (const ev of res.events) {
       switch (ev.type) {
@@ -182,16 +224,28 @@ export class App {
           vibrate(HAPTIC_PLACE);
           this.boardView.animatePlaced(ev.cells);
           const anchor = ev.cells[0];
-          if (anchor) popAt = this.boardView.cellCenterClient(anchor);
+          if (anchor) placedAt = this.boardView.cellCenterClient(anchor);
           break;
         }
         case 'cleared': {
           vibrate(HAPTIC_CLEAR);
           this.boardView.animateCleared(ev.cells);
+          linesCleared = ev.rows.length + ev.cols.length;
+          // Anchor the clear bonus / combo to the cleared line's centroid.
+          clearedAt = this.boardView.cellsCenterClient(ev.cells);
           break;
         }
         case 'scored': {
-          if (popAt) this.hud.popScore(ev.delta, popAt);
+          // Placement points float from the placed piece; the clear bonus from
+          // the cleared line.
+          const at = ev.kind === 'clear' ? clearedAt ?? placedAt : placedAt;
+          if (at) this.hud.popScore(ev.delta, at);
+          break;
+        }
+        case 'combo': {
+          combo = { streak: ev.streak, multiplier: ev.multiplier };
+          const at = clearedAt ?? placedAt;
+          if (at) this.hud.popCombo(ev.streak, ev.multiplier, at);
           break;
         }
         case 'refill': {
@@ -206,20 +260,38 @@ export class App {
     }
 
     this.renderHud();
+    this.announce(this.moveMessage(linesCleared, combo));
 
     switch (this.state.status) {
       case 'gameover':
+        this.announce(`Game over. Final score ${this.state.score}.`);
         this.endGame();
         return;
       case 'levelcomplete':
+        this.announce(`Level ${this.state.level} complete! Score ${this.state.score}.`);
         this.onLevelComplete();
         return;
       case 'levelfailed':
+        this.announce(`Level ${this.state.level} failed.`);
         this.onLevelFailed();
         return;
       default:
-        this.drag.setInteractive(true);
+        this.setInteractive(true);
     }
+  }
+
+  /** Build the aria-live message for a completed move (incl. streak/combo). */
+  private moveMessage(
+    linesCleared: number,
+    combo: { streak: number; multiplier: number } | null,
+  ): string {
+    if (linesCleared <= 0) return `Placed. Score ${this.state.score}.`;
+    let msg = `Cleared ${linesCleared} ${linesCleared === 1 ? 'line' : 'lines'}.`;
+    if (combo && combo.streak >= 2) {
+      msg += ` Streak ${combo.streak}, ×${formatMultiplier(combo.multiplier)}.`;
+    }
+    msg += ` Score ${this.state.score}.`;
+    return msg;
   }
 
   // ---- Endless game over ----

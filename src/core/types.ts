@@ -63,6 +63,7 @@ export interface GameState {
   readonly status: GameStatus;
   readonly rngState: number; // current PRNG state (seedable/deterministic)
   readonly pieceSeq: number; // counter for unique piece ids
+  readonly streak: number; // consecutive line-clearing placements (0 = no active streak)
 
   // --- Mode ---
   readonly mode: GameMode;
@@ -84,6 +85,7 @@ export type GameEvent =
   | { type: 'placed'; cells: Coord[]; material: number }
   | { type: 'cleared'; rows: number[]; cols: number[]; cells: Coord[] }
   | { type: 'scored'; delta: number; total: number; kind: 'placement' | 'clear' }
+  | { type: 'combo'; streak: number; multiplier: number; lines: number }
   | { type: 'refill'; pieces: Piece[] }
   | { type: 'gameover'; finalScore: number; highScore: number }
   | { type: 'levelcomplete'; level: number; score: number }

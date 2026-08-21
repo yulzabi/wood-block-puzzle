@@ -51,11 +51,17 @@ export class BoardView {
   constructor(container: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'board';
+    this.el.setAttribute('role', 'grid');
+    this.el.setAttribute('aria-label', `Game board, ${BOARD_SIZE} by ${BOARD_SIZE}`);
     this.el.style.setProperty('--board-size', String(BOARD_SIZE));
 
     for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
+      cell.setAttribute('role', 'gridcell');
+      const row = Math.floor(i / BOARD_SIZE);
+      const col = i % BOARD_SIZE;
+      cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, empty`);
       this.cells.push(cell);
       this.el.append(cell);
     }
@@ -81,6 +87,11 @@ export class BoardView {
       }
       const isTarget = !!targets && (targets[i] ?? 0) !== 0;
       cell.classList.toggle('target', isTarget);
+
+      const row = Math.floor(i / BOARD_SIZE);
+      const col = i % BOARD_SIZE;
+      const desc = isTarget ? 'target block' : material > 0 ? 'filled' : 'empty';
+      cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, ${desc}`);
     }
   }
 
@@ -168,5 +179,25 @@ export class BoardView {
     const cell = this.cellSize();
     if (!origin) return null;
     return { x: origin.x + cell / 2, y: origin.y + cell / 2 };
+  }
+
+  /**
+   * Client-space centroid of a set of cells (average of their centers) — used to
+   * anchor the clear-bonus pop-up / combo indicator to the cleared line rather
+   * than an arbitrary placement cell. Returns null if none resolve.
+   */
+  cellsCenterClient(cells: readonly Coord[]): { x: number; y: number } | null {
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (const c of cells) {
+      const p = this.cellCenterClient(c);
+      if (!p) continue;
+      sx += p.x;
+      sy += p.y;
+      n++;
+    }
+    if (n === 0) return null;
+    return { x: sx / n, y: sy / n };
   }
 }
