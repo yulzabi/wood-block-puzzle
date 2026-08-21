@@ -9,6 +9,7 @@ const LEVEL_KEY = 'wbp.v1.level';
 const SETTINGS_KEY = 'wbp.v1.settings';
 const STATS_KEY = 'wbp.v1.stats';
 const SEEN_INTRO_KEY = 'wbp.v1.seenIntro';
+const LEVEL_RESULTS_KEY = 'wbp.v1.levelResults';
 
 /** Return the localStorage instance, or null if it is unavailable in this context. */
 function getStorage(): Storage | null {
@@ -76,6 +77,86 @@ export function saveLevelProgress(level: number): void {
   } catch {
     // Quota exceeded / disabled — silently ignore.
   }
+}
+
+/**
+ * Per-level result. Levels are deterministic from their number, so we persist
+ * only outcomes — never layouts. `completed` is monotonic (never regresses);
+ * `bestScore` keeps the highest score seen.
+ */
+export interface LevelResult {
+  completed: boolean;
+  bestScore: number;
+}
+
+/**
+ * Load all persisted per-level results, keyed by level number. Skips corrupt
+ * entries and invalid level keys. Corrupt/missing/unavailable → empty map.
+ */
+export function loadLevelResults(): Record<number, LevelResult> {
+  const storage = getStorage();
+  if (!storage) return {};
+  try {
+    const raw = storage.getItem(LEVEL_RESULTS_KEY);
+    if (raw === null) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return {};
+    const out: Record<number, LevelResult> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      const level = Number(key);
+      if (!Number.isInteger(level) || level < 1) continue;
+      if (typeof value !== 'object' || value === null) continue;
+      const v = value as Record<string, unknown>;
+      const rawScore = v['bestScore'];
+      const bestScore = typeof rawScore === 'number' && Number.isInteger(rawScore) && rawScore >= 0 ? rawScore : 0;
+      out[level] = { completed: v['completed'] === true, bestScore };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Merge a level result: `bestScore = max(existing, score)` and
+ * `completed = existing.completed || completed` (monotonic — never downgrades).
+ * Silent no-op on any failure or invalid level.
+ */
+export function saveLevelResult(level: number, result: { score: number; completed: boolean }): void {
+  if (!Number.isInteger(level) || level < 1) return;
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    const all = loadLevelResults();
+    const prev = all[level] ?? { completed: false, bestScore: 0 };
+    const score = Number.isInteger(result.score) && result.score >= 0 ? result.score : 0;
+    all[level] = {
+      completed: prev.completed || result.completed === true,
+      bestScore: Math.max(prev.bestScore, score),
+    };
+    storage.setItem(LEVEL_RESULTS_KEY, JSON.stringify(all));
+  } catch {
+    // Quota exceeded / disabled — silently ignore.
+  }
+}
+
+/** A single level's result, defaulting an unknown level to not-completed / 0. Pure. */
+export function levelResult(results: Record<number, LevelResult>, level: number): LevelResult {
+  return results[level] ?? { completed: false, bestScore: 0 };
+}
+
+/**
+ * The lowest unlocked, not-yet-completed level — the "current / next to play"
+ * node the Level Map highlights. Unlocked = `level <= highestReached`; level 1
+ * is always unlocked. If every unlocked level is completed, returns the next
+ * (newly unlocked) level. Pure.
+ */
+export function nextLevelToPlay(results: Record<number, LevelResult>, highestReached: number): number {
+  const frontier = Math.max(1, highestReached);
+  for (let level = 1; level <= frontier; level++) {
+    if (!results[level]?.completed) return level;
+  }
+  return frontier + 1;
 }
 
 /** User settings (audio + haptics + placement-hints + colorblind toggles). */

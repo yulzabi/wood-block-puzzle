@@ -26,6 +26,7 @@ import {
   saveHighScore,
   loadLevelProgress,
   saveLevelProgress,
+  saveLevelResult,
   loadSettings,
   saveSettings,
   loadStats,
@@ -555,8 +556,9 @@ export class App {
 
   // ---- Levels ----
   private onLevelComplete(): void {
-    // Unlock the next level.
+    // Unlock the next level and record this level's result (for the Level Map).
     saveLevelProgress(this.state.level + 1);
+    saveLevelResult(this.state.level, { score: this.state.score, completed: true });
     renderLevelComplete(this.screens.gameover, {
       level: this.state.level,
       score: this.state.score,
