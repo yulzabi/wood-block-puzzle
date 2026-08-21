@@ -168,14 +168,24 @@ export function linesCompletedBy(board: Board, shape: Shape, at: Coord): { rows:
   return { rows, cols };
 }
 
-/** True iff `shape` can be placed at any position on the board. */
-export function hasAnyPlacement(board: Board, shape: Shape): boolean {
+/**
+ * The first legal origin for `shape` in row-major order (top-to-bottom, then
+ * left-to-right), or null if it fits nowhere. Used to surface a placement hint.
+ * Deterministic and pure.
+ */
+export function firstPlacement(board: Board, shape: Shape): Coord | null {
   const maxRow = BOARD_SIZE - shape.height;
   const maxCol = BOARD_SIZE - shape.width;
   for (let row = 0; row <= maxRow; row++) {
     for (let col = 0; col <= maxCol; col++) {
-      if (canPlace(board, shape, { row, col })) return true;
+      const at = { row, col };
+      if (canPlace(board, shape, at)) return at;
     }
   }
-  return false;
+  return null;
+}
+
+/** True iff `shape` can be placed at any position on the board. */
+export function hasAnyPlacement(board: Board, shape: Shape): boolean {
+  return firstPlacement(board, shape) !== null;
 }

@@ -4,6 +4,7 @@ import {
   clearLines,
   createBoard,
   findFullLines,
+  firstPlacement,
   hasAnyPlacement,
   idx,
   inBounds,
@@ -159,6 +160,39 @@ describe('hasAnyPlacement', () => {
     b[idx(4, 4)] = 0;
     expect(hasAnyPlacement(b, single)).toBe(true);
     expect(hasAnyPlacement(b, square2)).toBe(false);
+  });
+});
+
+describe('firstPlacement', () => {
+  it('returns the first legal origin in row-major order', () => {
+    const b = createBoard();
+    // Empty board: the very first origin scanned is the top-left.
+    expect(firstPlacement(b, square2)).toEqual({ row: 0, col: 0 });
+
+    // Block the top-left cell: the scan skips it and takes the next column.
+    b[idx(0, 0)] = 1;
+    expect(firstPlacement(b, single)).toEqual({ row: 0, col: 1 });
+  });
+
+  it('returns null when the shape fits nowhere', () => {
+    const full = new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
+    expect(firstPlacement(full, single)).toBeNull();
+
+    // A single gap is too small for a 2x2 square.
+    const oneGap = new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
+    oneGap[idx(4, 4)] = 0;
+    expect(firstPlacement(oneGap, square2)).toBeNull();
+  });
+
+  it('finds the only fit when it sits in a corner (exact-fit-at-edge)', () => {
+    // Fill everything, then clear exactly the bottom-right 2x2 so square2 fits
+    // in one place only — the corner origin (6,6).
+    const b = new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
+    b[idx(6, 6)] = 0;
+    b[idx(6, 7)] = 0;
+    b[idx(7, 6)] = 0;
+    b[idx(7, 7)] = 0;
+    expect(firstPlacement(b, square2)).toEqual({ row: 6, col: 6 });
   });
 });
 
