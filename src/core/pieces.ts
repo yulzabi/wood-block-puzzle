@@ -2,13 +2,22 @@
  * Piece generation (pure).
  *
  * Draws pieces uniformly at random from the shape set, threading the seedable
- * RNG state so generation is fully reproducible in tests.
+ * RNG state so generation is fully reproducible in tests. On gem-goal levels,
+ * `attachGems` then rides gems onto some of those pieces, draining the level's
+ * supply gradually as trays are dealt.
  */
 
 import type { Piece } from './types';
 import { MATERIAL_COUNT } from './types';
 import { SHAPES } from './shapes';
 import { nextInt } from './rng';
+
+/**
+ * Per-piece chance (percent) that a freshly-dealt piece carries a gem, when the
+ * level still has gems to supply. Kept modest so gems trickle in across the
+ * level rather than dumping onto the first tray. Tunable.
+ */
+const GEM_DEAL_PERCENT = 50;
 
 /**
  * Draw `count` pieces uniformly from SHAPES, assigning each a random material
@@ -38,4 +47,73 @@ export function generatePieces(
   }
 
   return { pieces, rngState: state, nextSeq: seq };
+}
+
+/** Total gems remaining across all colors. */
+function totalRemaining(supply: Record<number, number>): number {
+  let n = 0;
+  for (const v of Object.values(supply)) n += v;
+  return n;
+}
+
+/**
+ * Pick a color from `supply` weighted by its remaining count (colors iterate in
+ * ascending order, so the choice is deterministic). Caller guarantees the total
+ * is positive. Returns the chosen color and the advanced RNG state.
+ */
+function pickWeightedColor(
+  supply: Record<number, number>,
+  rngState: number,
+): { color: number; state: number } {
+  const total = totalRemaining(supply);
+  const roll = nextInt(rngState, total);
+  let acc = 0;
+  for (const [color, n] of Object.entries(supply)) {
+    acc += n;
+    if (roll.value < acc) return { color: Number(color), state: roll.state };
+  }
+  // Unreachable when total > 0; return the last color defensively.
+  const keys = Object.keys(supply);
+  return { color: Number(keys[keys.length - 1]), state: roll.state };
+}
+
+/**
+ * Ride gems onto freshly-dealt pieces, draining `supply` per color. Each piece
+ * has a `GEM_DEAL_PERCENT` chance to carry a single gem (on one of its shape
+ * cells) whose color is drawn weighted by remaining supply; a piece may end up
+ * with zero gems. Never deals more of a color than remains — supply is
+ * decremented as gems are dealt (on deal, not on clear). Pure + deterministic:
+ * threads the RNG and returns a fresh `supplyRemaining` without mutating input.
+ */
+export function attachGems(
+  pieces: readonly Piece[],
+  rngState: number,
+  supply: Record<number, number>,
+): { pieces: Piece[]; rngState: number; supplyRemaining: Record<number, number> } {
+  let state = rngState;
+  const remaining: Record<number, number> = { ...supply };
+  const out: Piece[] = [];
+
+  for (const piece of pieces) {
+    if (totalRemaining(remaining) <= 0) {
+      out.push(piece); // nothing left to deal
+      continue;
+    }
+    const roll = nextInt(state, 100);
+    state = roll.state;
+    if (roll.value >= GEM_DEAL_PERCENT) {
+      out.push(piece); // this piece stays gemless
+      continue;
+    }
+
+    const picked = pickWeightedColor(remaining, state);
+    state = picked.state;
+    const cellPick = nextInt(state, piece.shape.cells.length);
+    state = cellPick.state;
+
+    remaining[picked.color] = (remaining[picked.color] ?? 0) - 1;
+    out.push({ ...piece, gems: { [cellPick.value]: picked.color } });
+  }
+
+  return { pieces: out, rngState: state, supplyRemaining: remaining };
 }

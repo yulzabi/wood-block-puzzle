@@ -9,7 +9,7 @@
 import type { Coord, GameEvent, GameState, GameStatus, Move, MoveResult, Piece, RejectReason } from './types';
 import { TRAY_SIZE } from './types';
 import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, idx, inBounds, place } from './board';
-import { generatePieces } from './pieces';
+import { attachGems, generatePieces } from './pieces';
 import { generateLevel } from './levels';
 import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 import { seedState } from './rng';
@@ -77,15 +77,27 @@ function beginPlaying(state: GameState): GameState {
 /** Internal: begin a fresh Levels round for `level`, preserving RNG + high score. */
 function beginLevel(state: GameState, level: number): GameState {
   const gen = generateLevel(level);
-  const { pieces, rngState, nextSeq } = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+  const drawn = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+
+  // On gem levels, ride gems onto the first tray, draining the level's supply.
+  let tray = drawn.pieces;
+  let rngState = drawn.rngState;
+  let gemSupplyRemaining = gen.gemSupplyRemaining;
+  if (gen.goalType === 'gems') {
+    const dealt = attachGems(drawn.pieces, drawn.rngState, gen.gemSupplyRemaining);
+    tray = dealt.pieces;
+    rngState = dealt.rngState;
+    gemSupplyRemaining = dealt.supplyRemaining;
+  }
+
   return {
     board: gen.board,
-    tray: pieces,
+    tray,
     score: 0,
     highScore: state.highScore,
     status: 'playing',
     rngState,
-    pieceSeq: nextSeq,
+    pieceSeq: drawn.nextSeq,
     streak: 0,
     mode: 'levels',
     level,
@@ -94,7 +106,7 @@ function beginLevel(state: GameState, level: number): GameState {
     gems: gen.gems,
     quotas: gen.quotas,
     gemsCleared: {},
-    gemSupplyRemaining: gen.gemSupplyRemaining,
+    gemSupplyRemaining,
   };
 }
 
@@ -176,29 +188,44 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'cleared', rows, cols, cells: cleared.cells });
   }
 
-  // 2b. Gem accounting (Levels only): drop any cleared gems, tally them per
-  //     color, and accumulate. Emitted after `cleared`, before `refill`. Endless
-  //     carries no gems, so it does zero gem work here.
+  // 2b. Gems (Levels only): write the placed piece's gems onto the board channel,
+  //     then drop + tally any gems a line-clear removes this move (including a
+  //     just-placed one). The gemsCleared event is emitted after `cleared` and
+  //     before `refill`. Endless carries no gems, so it does zero gem work here.
   let gems = state.gems;
   let gemsCleared = state.gemsCleared;
-  if (state.mode === 'levels' && clearedCells.length > 0) {
-    const nextGems = state.gems.slice();
-    const clearedByColor: Record<number, number> = {};
-    let removed = 0;
-    for (const c of clearedCells) {
-      const i = idx(c.row, c.col);
-      const color = nextGems[i];
-      if (color) {
-        clearedByColor[color] = (clearedByColor[color] ?? 0) + 1;
-        nextGems[i] = 0;
-        removed++;
+  if (state.mode === 'levels') {
+    let nextGems: Uint8Array | null = null;
+    const mutableGems = (): Uint8Array => (nextGems ??= state.gems.slice());
+
+    if (piece.gems) {
+      const g = mutableGems();
+      for (const [k, color] of Object.entries(piece.gems)) {
+        const cell = placed.cells[Number(k)];
+        if (cell) g[idx(cell.row, cell.col)] = color;
       }
     }
-    if (removed > 0) {
-      gems = nextGems;
-      gemsCleared = mergeCounts(state.gemsCleared, clearedByColor);
-      events.push({ type: 'gemsCleared', cleared: clearedByColor, totals: gemsCleared });
+
+    if (clearedCells.length > 0) {
+      const g = mutableGems();
+      const clearedByColor: Record<number, number> = {};
+      let removed = 0;
+      for (const c of clearedCells) {
+        const i = idx(c.row, c.col);
+        const color = g[i];
+        if (color) {
+          clearedByColor[color] = (clearedByColor[color] ?? 0) + 1;
+          g[i] = 0;
+          removed++;
+        }
+      }
+      if (removed > 0) {
+        gemsCleared = mergeCounts(state.gemsCleared, clearedByColor);
+        events.push({ type: 'gemsCleared', cleared: clearedByColor, totals: gemsCleared });
+      }
     }
+
+    if (nextGems) gems = nextGems;
   }
 
   // 3. Streak (strike): clearing lines on consecutive placements builds a streak
@@ -217,16 +244,24 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'combo', streak, multiplier, lines: lineCount });
   }
 
-  // 5. Mark the piece placed; refill when the whole tray is exhausted.
+  // 5. Mark the piece placed; refill when the whole tray is exhausted. On gem
+  //    levels the fresh tray also draws gems, draining supply (decrement-on-deal).
   let tray: Piece[] = state.tray.map((p) => (p.id === move.pieceId ? { ...p, placed: true } : p));
   let rngState = state.rngState;
   let pieceSeq = state.pieceSeq;
+  let gemSupplyRemaining = state.gemSupplyRemaining;
   if (tray.every((p) => p.placed)) {
     const refill = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
     tray = refill.pieces;
     rngState = refill.rngState;
     pieceSeq = refill.nextSeq;
-    events.push({ type: 'refill', pieces: refill.pieces });
+    if (state.mode === 'levels' && state.goalType === 'gems') {
+      const dealt = attachGems(refill.pieces, refill.rngState, gemSupplyRemaining);
+      tray = dealt.pieces;
+      rngState = dealt.rngState;
+      gemSupplyRemaining = dealt.supplyRemaining;
+    }
+    events.push({ type: 'refill', pieces: tray });
   }
 
   // 6. High score.
@@ -274,7 +309,7 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       gems,
       quotas: state.quotas,
       gemsCleared,
-      gemSupplyRemaining: state.gemSupplyRemaining,
+      gemSupplyRemaining,
     },
     events,
   };

@@ -74,6 +74,7 @@ function levelsState(opts: {
   goalType?: GoalType;
   quotas?: Record<number, number>;
   gemsCleared?: Record<number, number>;
+  gemSupplyRemaining?: Record<number, number>;
 }): GameState {
   return {
     board: opts.board,
@@ -91,7 +92,7 @@ function levelsState(opts: {
     gems: opts.gems,
     quotas: opts.quotas ?? quotasFromMask(opts.gems),
     gemsCleared: opts.gemsCleared ?? {},
-    gemSupplyRemaining: {},
+    gemSupplyRemaining: opts.gemSupplyRemaining ?? {},
   };
 }
 
@@ -444,6 +445,85 @@ describe('levels — applyMove resolution (either/or win)', () => {
     expect(res.state.status).toBe('levelfailed');
     expect(types(res.events)).toContain('levelfailed');
     expect(res.events.find((e) => e.type === 'levelfailed')).toMatchObject({ level: 3 });
+  });
+});
+
+describe('levels — piece-borne gems', () => {
+  it('gem levels deal gems onto the first tray and decrement supply by exactly that', () => {
+    const g = newLevelsGame(2, 7, 0); // gem goal
+    const initialSupply = sumCounts(generateLevel(2).gemSupplyRemaining);
+    const supplyAfter = sumCounts(g.gemSupplyRemaining);
+    const gemsOnTray = g.tray.reduce((n, p) => n + (p.gems ? Object.keys(p.gems).length : 0), 0);
+    // Supply drained by deal == gems that landed on the tray. Decrement-on-deal.
+    expect(initialSupply - supplyAfter).toBe(gemsOnTray);
+    expect(supplyAfter).toBeLessThanOrEqual(initialSupply);
+  });
+
+  it('score levels never deal gems onto pieces', () => {
+    const g = newLevelsGame(1, 7, 0); // score goal
+    expect(g.tray.every((p) => p.gems === undefined)).toBe(true);
+    expect(sumCounts(g.gemSupplyRemaining)).toBe(0);
+  });
+
+  it('placing a gem-bearing piece writes its gems onto the board channel (no supply change)', () => {
+    const tray = [{ ...piece('g', single, 4), gems: { 0: 2 } }, piece('z', square2, 5)];
+    const state = levelsState({
+      board: createBoard(),
+      gems: createBoard(),
+      tray,
+      goalType: 'gems',
+      quotas: { 2: 5 },
+      gemSupplyRemaining: { 2: 3 },
+    });
+
+    const res = applyMove(state, { type: 'place', pieceId: 'g', at: { row: 3, col: 3 } });
+
+    expect(res.state.gems[idx(3, 3)]).toBe(2); // gem written to the board
+    expect(maskCount(res.state.gems)).toBe(1);
+    // Placement does not touch supply — the decrement happened at deal time.
+    expect(res.state.gemSupplyRemaining).toEqual({ 2: 3 });
+  });
+
+  it('placing a gem-bearing piece that completes a line clears + tallies that gem', () => {
+    const board = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
+    const tray = [{ ...piece('g', single, 4), gems: { 0: 3 } }];
+    const state = levelsState({
+      board,
+      gems: createBoard(),
+      tray,
+      goalType: 'gems',
+      quotas: { 3: 5 },
+      gemSupplyRemaining: { 3: 5 },
+    });
+
+    const res = applyMove(state, { type: 'place', pieceId: 'g', at: { row: 0, col: 0 } });
+
+    // The placed gem lands on the completed row and is immediately cleared+counted.
+    expect(res.state.gemsCleared).toEqual({ 3: 1 });
+    expect(res.events.find((e) => e.type === 'gemsCleared')).toMatchObject({ cleared: { 3: 1 } });
+    expect(res.state.gems[idx(0, 0)]).toBe(0);
+  });
+
+  it('is deterministic across the refill path (same seed -> identical gemmed refill + supply)', () => {
+    const make = (): ReturnType<typeof levelsState> =>
+      levelsState({
+        board: createBoard(),
+        gems: createBoard(),
+        tray: [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)],
+        goalType: 'gems',
+        quotas: { 1: 20 },
+        gemSupplyRemaining: { 1: 20 },
+      });
+
+    const r1 = applyMove(make(), { type: 'place', pieceId: 'c', at: { row: 4, col: 4 } });
+    const r2 = applyMove(make(), { type: 'place', pieceId: 'c', at: { row: 4, col: 4 } });
+
+    expect(types(r1.events)).toContain('refill');
+    expect(r1.state.tray.map((p) => p.gems ?? null)).toEqual(r2.state.tray.map((p) => p.gems ?? null));
+    expect(r1.state.gemSupplyRemaining).toEqual(r2.state.gemSupplyRemaining);
+    // Supply never grows across a refill.
+    expect(sumCounts(r1.state.gemSupplyRemaining)).toBeLessThanOrEqual(20);
   });
 });
 
