@@ -54,7 +54,8 @@ import {
 } from './ui/screens';
 import { BoardView } from './ui/board-view';
 import { TrayView } from './ui/tray-view';
-import { HUD, formatMultiplier } from './ui/hud';
+import { HUD, formatMultiplier, type GemChip } from './ui/hud';
+import { gemColorName } from './ui/gems';
 import { DragController } from './input/drag-controller';
 import { KeyboardController } from './input/keyboard-controller';
 import { createParticles, type Particles } from './ui/particles';
@@ -300,12 +301,19 @@ export class App {
     this.screens.show('game');
     this.setInteractive(true);
     if (this.state.mode === 'levels') {
-      this.announce(
-        `Level ${this.state.level}. Clear ${this.gemTotal()} blocks and reach ${this.state.targetScore} points.`,
-      );
+      this.announce(this.objectiveMessage());
     } else {
       this.announce('Endless mode. Place pieces to clear lines.');
     }
+  }
+
+  /** Spoken objective for the current level (gem quotas or a score target). */
+  private objectiveMessage(): string {
+    if (this.state.goalType === 'gems') {
+      const parts = this.gemChips().map(({ color, remaining }) => `${remaining} ${gemColorName(color)}`);
+      return `Level ${this.state.level}. Clear ${parts.join(', ')} gems.`;
+    }
+    return `Level ${this.state.level}. Reach ${this.state.targetScore} points.`;
   }
 
   /** Enable/disable both pointer and keyboard placement together. */
@@ -328,9 +336,13 @@ export class App {
     this.renderHud();
   }
 
-  /** Draw the HUD variant appropriate to the current mode. */
+  /** Draw the HUD variant appropriate to the current mode + goal. */
   private renderHud(): void {
-    if (this.state.mode === 'levels') {
+    if (this.state.mode !== 'levels') {
+      this.hud.render(this.state.score, this.state.highScore);
+    } else if (this.state.goalType === 'gems') {
+      this.hud.renderGems(this.state.level, this.gemChips());
+    } else {
       this.hud.renderLevels(
         this.state.level,
         this.state.score,
@@ -338,12 +350,18 @@ export class App {
         this.gemsLeft(),
         this.gemTotal(),
       );
-    } else {
-      this.hud.render(this.state.score, this.state.highScore);
     }
   }
 
-  /** Count of gem blocks still on the board (Levels mode). */
+  /** Per-color gems still to clear (quota − cleared, clamped at 0), by color. */
+  private gemChips(): GemChip[] {
+    const cleared = this.state.gemsCleared;
+    return Object.entries(this.state.quotas)
+      .map(([c, quota]) => ({ color: Number(c), remaining: Math.max(0, quota - (cleared[Number(c)] ?? 0)) }))
+      .sort((a, b) => a.color - b.color);
+  }
+
+  /** Count of gem blocks still on the board (score-goal Levels progress). */
   private gemsLeft(): number {
     const g = this.state.gems;
     let n = 0;
@@ -351,7 +369,7 @@ export class App {
     return n;
   }
 
-  /** Total gems the current level requires (the HUD progress denominator). */
+  /** Total gems the current level requires (the score-goal HUD denominator). */
   private gemTotal(): number {
     let n = 0;
     for (const c of Object.values(this.state.quotas)) n += c;
@@ -378,6 +396,7 @@ export class App {
     let clearedAt: { x: number; y: number } | null = null;
     let linesCleared = 0;
     let combo: { streak: number; multiplier: number } | null = null;
+    let gemsClearedThisMove: Record<number, number> | null = null;
 
     for (const ev of res.events) {
       switch (ev.type) {
@@ -420,6 +439,10 @@ export class App {
           if (at) this.hud.popCombo(ev.streak, ev.multiplier, at);
           break;
         }
+        case 'gemsCleared': {
+          gemsClearedThisMove = ev.cleared;
+          break;
+        }
         case 'refill': {
           this.trayView.renderTray(this.state.tray);
           break;
@@ -432,7 +455,7 @@ export class App {
     }
 
     this.renderHud();
-    this.announce(this.moveMessage(linesCleared, combo));
+    this.announce(this.moveMessage(linesCleared, combo, gemsClearedThisMove));
 
     // Persist accumulated stats (best score / lines / streak updated above).
     if (this.state.score > this.stats.bestScore) {
@@ -458,18 +481,46 @@ export class App {
     }
   }
 
-  /** Build the aria-live message for a completed move (incl. streak/combo). */
+  /**
+   * Build the single aria-live message for a completed move. On gem levels it
+   * composes line + gem clears into one coherent write ("Cleared 2 lines and 3
+   * red. 11 red left.") rather than two competing announcements; on score/endless
+   * it reports lines + streak + score as before.
+   */
   private moveMessage(
     linesCleared: number,
     combo: { streak: number; multiplier: number } | null,
+    gemsClearedThisMove: Record<number, number> | null,
   ): string {
+    const lineText = `Cleared ${linesCleared} ${linesCleared === 1 ? 'line' : 'lines'}`;
+
+    if (this.state.mode === 'levels' && this.state.goalType === 'gems') {
+      if (gemsClearedThisMove && Object.keys(gemsClearedThisMove).length > 0) {
+        // Gems only clear via a line clear, so a line is always part of this.
+        const gemText = this.formatGemCounts(gemsClearedThisMove);
+        const left = this.gemChips().filter((c) => c.remaining > 0);
+        const leftText = left.length
+          ? ` ${left.map((c) => `${c.remaining} ${gemColorName(c.color)}`).join(', ')} left.`
+          : ' All gems cleared!';
+        return `${lineText} and ${gemText}.${leftText}`;
+      }
+      return linesCleared > 0 ? `${lineText}.` : 'Placed.';
+    }
+
     if (linesCleared <= 0) return `Placed. Score ${this.state.score}.`;
-    let msg = `Cleared ${linesCleared} ${linesCleared === 1 ? 'line' : 'lines'}.`;
+    let msg = `${lineText}.`;
     if (combo && combo.streak >= 2) {
       msg += ` Streak ${combo.streak}, ×${formatMultiplier(combo.multiplier)}.`;
     }
     msg += ` Score ${this.state.score}.`;
     return msg;
+  }
+
+  /** Format a per-color count map as "3 red, 2 blue". */
+  private formatGemCounts(counts: Record<number, number>): string {
+    return Object.entries(counts)
+      .map(([color, n]) => `${n} ${gemColorName(Number(color))}`)
+      .join(', ');
   }
 
   // ---- Endless game over ----

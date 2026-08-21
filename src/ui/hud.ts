@@ -3,17 +3,30 @@
  * score, plus floating "+N" pop-ups on scoring.
  */
 
+import { buildGemMarker, gemColorName } from './gems';
+
+/** A gem-goal HUD entry: how many of a color remain to clear. */
+export interface GemChip {
+  readonly color: number;
+  readonly remaining: number;
+}
+
 export class HUD {
   readonly el: HTMLElement;
   // Endless row (SCORE / BEST).
   private readonly endlessRow: HTMLElement;
   private readonly scoreEl: HTMLElement;
   private readonly highEl: HTMLElement;
-  // Levels row (LEVEL / BLOCKS / SCORE toward target).
+  // Levels row (LEVEL / BLOCKS / SCORE toward target) — score-goal levels.
   private readonly levelsRow: HTMLElement;
   private readonly levelEl: HTMLElement;
   private readonly blocksEl: HTMLElement;
+  private readonly blocksBox: HTMLElement;
   private readonly lvlScoreEl: HTMLElement;
+  // Gems row (LEVEL + per-color remaining chips) — gem-goal levels.
+  private readonly gemsRow: HTMLElement;
+  private readonly gemLevelEl: HTMLElement;
+  private readonly gemChipsEl: HTMLElement;
   private displayed = 0;
   private raf = 0;
   private startTs = 0;
@@ -29,25 +42,38 @@ export class HUD {
     this.scoreEl = box(this.endlessRow, 'SCORE', 'hud-score');
     this.highEl = box(this.endlessRow, 'BEST', 'hud-high');
 
-    // --- Levels row ---
+    // --- Levels row (score goal) ---
     this.levelsRow = row('hud--levels');
     this.levelsRow.hidden = true;
     this.levelEl = box(this.levelsRow, 'LEVEL', 'hud-level');
     this.blocksEl = box(this.levelsRow, 'BLOCKS', 'hud-blocks');
+    this.blocksBox = this.blocksEl.parentElement as HTMLElement;
     this.lvlScoreEl = box(this.levelsRow, 'SCORE', 'hud-lvlscore');
 
-    this.el.append(this.endlessRow, this.levelsRow);
+    // --- Gems row (gem goal) ---
+    this.gemsRow = row('hud--gems');
+    this.gemsRow.hidden = true;
+    this.gemLevelEl = box(this.gemsRow, 'LEVEL', 'hud-level');
+    this.gemChipsEl = document.createElement('div');
+    this.gemChipsEl.className = 'gem-chips';
+    this.gemsRow.append(this.gemChipsEl);
+
+    this.el.append(this.endlessRow, this.levelsRow, this.gemsRow);
   }
 
   /** Endless HUD: score (tweened) + persisted best. */
   render(score: number, highScore: number): void {
     this.endlessRow.hidden = false;
     this.levelsRow.hidden = true;
+    this.gemsRow.hidden = true;
     this.highEl.textContent = String(highScore);
     this.tweenTo(score);
   }
 
-  /** Levels HUD: current level, blocks left (remaining/total), score toward target. */
+  /**
+   * Score-goal Levels HUD: current level + score toward target. Shows a blocks
+   * box only when the level has blocks to clear (hidden on pure score levels).
+   */
   renderLevels(
     level: number,
     score: number,
@@ -56,10 +82,32 @@ export class HUD {
     total: number,
   ): void {
     this.endlessRow.hidden = true;
+    this.gemsRow.hidden = true;
     this.levelsRow.hidden = false;
     this.levelEl.textContent = String(level);
+    this.blocksBox.hidden = total <= 0;
     this.blocksEl.textContent = `${remaining}/${total}`;
     this.lvlScoreEl.textContent = `${score}/${targetScore}`;
+  }
+
+  /** Gem-goal Levels HUD: current level + a per-color "remaining" chip each. */
+  renderGems(level: number, chips: readonly GemChip[]): void {
+    this.endlessRow.hidden = true;
+    this.levelsRow.hidden = true;
+    this.gemsRow.hidden = false;
+    this.gemLevelEl.textContent = String(level);
+    this.gemChipsEl.textContent = '';
+    for (const { color, remaining } of chips) {
+      const chip = document.createElement('div');
+      chip.className = 'gem-chip';
+      chip.setAttribute('aria-label', `${remaining} ${gemColorName(color)} left`);
+      chip.append(buildGemMarker(color));
+      const count = document.createElement('span');
+      count.className = 'gem-chip-count';
+      count.textContent = String(remaining);
+      chip.append(count);
+      this.gemChipsEl.append(chip);
+    }
   }
 
   /** Snap the tweened endless score to zero (used when a fresh game starts). */
