@@ -33,6 +33,7 @@ P2  Hints toggle (OFF by default)            ← small, self-contained
 P3  Gem objective system (Levels redesign)   ← LARGEST; must land BEFORE the Level Map
 P4  Level Map + per-level history            ← depends on P3 (map reflects gem goals/stars)
 P5  Resume in-progress game                  ← independent; high native-feel value
+P7  Streak feedback + grace                  ← after P3/P4 (touches scoring + HUD); genre-researched
 P6  Hygiene guardrails                       ← DONE (commit c2912cc); kept for record
 ```
 
@@ -266,8 +267,69 @@ owner has requested resume as the planned next step.
 
 ---
 
-## P6 — Hygiene guardrails  **[DONE — commit c2912cc]**
+## P7 — Streak feedback + grace  **[after P3/P4 — touches scoring + HUD]**
 
+Make the existing streak mechanic **legible** and slightly more forgiving. Grounded in
+genre research (Woodoku/Block Blast/1010!): the current model — streak = consecutive
+line-clearing placements, hard reset on a no-clear, capped linear multiplier — is already
+genre-correct. Research conclusions that shape this item:
+
+- **Do NOT tie the streak to the 3-piece tray refill.** No leading game does; the
+  "clear once per tray" idea is player *advice*, not a rule. Tying reward to inventory
+  makes identical moves score differently on invisible state. Rejected.
+- The genre visualizes streak with a **persistent multiplier badge + a transient pop**,
+  **not a draining meter** (a meter implies a time/decay mechanic this turn-based game
+  doesn't have). So: badge, not bar.
+- **Harsh reset** (one no-clear placement zeroes a hard-earned streak) is the top casual
+  complaint → soften with a single-placement grace.
+
+### Locked decisions (owner, 2026-08-21)
+
+- **Grace shield: YES** — one non-clearing placement is forgiven per active streak.
+- **Cap: raise to ×5** (from ×4). Keep the linear curve.
+- Measured in **placements** (unchanged), never tray cycles.
+
+### Logic (core, pure — extends existing streak)
+
+- Keep `streakMultiplier`; change the curve cap: `1 + 0.5·(streak−1)`, **capped ×5**
+  (reached at streak 9). Update `scoring.ts` + its tests.
+- Add a **grace flag** to `GameState` (e.g. `streakGraceUsed: boolean`):
+  - Clearing placement → `streak++`, `streakGraceUsed = false` (grace refills), multiplier applies.
+  - Non-clearing placement:
+    - if `streak >= 2` and `!streakGraceUsed` → **hold** streak, set `streakGraceUsed = true`
+      (grace consumed — streak survives one miss).
+    - else → `streak = 0`, `streakGraceUsed = false` (reset).
+  - Deterministic; unit-test: one setup move preserves streak; a second consecutive no-clear
+    resets; a clear refills grace; grace only applies at streak ≥ 2.
+- Emit enough in the existing events (or extend the `combo` event) for the UI to show
+  streak level, multiplier, and grace state.
+
+### UI
+
+- **Persistent multiplier badge** in a fixed HUD spot, visible only when `streak >= 2`,
+  showing e.g. `×2.5`. Escalates in warmth/intensity with the multiplier (reuses existing
+  streak-warmth juice).
+- **Transient pop** at the clear site (existing combo pop + rising-pitch audio + particles) —
+  keep as-is.
+- **Grace/shield indicator** — a small distinct icon on the badge that dims when the grace
+  is spent, so the softening reads as a rule, not an inconsistency.
+
+### Accessibility
+
+- Badge carries the numeric `×N` (never color-only); shield differs by **shape**, not hue.
+- Reduced-motion: badge updates without animation; particle/scale gated (already respected).
+- Screen-reader via existing aria-live, terse + debounced: "Streak 3, multiplier 2 times",
+  "Streak protected", "Streak reset". Don't flood on rapid clears.
+
+### Why after P3/P4
+
+Touches `scoring.ts`, `game.ts` (streak state), and the HUD — all of which P3 (gems) is
+actively changing. Sequencing P7 after the gem system avoids perturbing that work mid-flight
+and lets the badge coexist cleanly with the per-color gem HUD.
+
+---
+
+## P6 — Hygiene guardrails  **[DONE — commit c2912cc]**
 Kept for record; all resolved:
 
 - ✅ README test-count de-hardcoded ("run `npm test`").
