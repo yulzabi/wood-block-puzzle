@@ -136,6 +136,40 @@
   box-shadow: inset 0 0 0 2px var(--preview-invalid);
 }
 
+/* Colorblind-safe validity cue: distinguish valid/invalid by SHAPE, not just hue
+   (green/red alone fails for red-green colorblindness). Uses ::before so it never
+   clashes with the target ring (::after); both can show at once. Static — no
+   animation, so nothing to disable under prefers-reduced-motion. */
+.cell.preview--valid::before,
+.cell.preview--invalid::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+/* Valid: a checkmark drawn from two borders, scaling with the cell. */
+.cell.preview--valid::before {
+  left: 50%;
+  top: 46%;
+  width: 26%;
+  height: 46%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-right: 3px solid rgba(255, 255, 255, 0.95);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+/* Invalid: diagonal hatch fill — an unmistakable "blocked" pattern. */
+.cell.preview--invalid::before {
+  inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent 0,
+    transparent 4px,
+    rgba(255, 255, 255, 0.5) 4px,
+    rgba(255, 255, 255, 0.5) 7px
+  );
+}
+
 .cell.just-placed {
   animation: cell-pop 0.22s ease-out;
 }
