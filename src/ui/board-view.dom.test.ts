@@ -50,6 +50,10 @@ describe('BoardView (DOM)', () => {
     const marker = c5.querySelector('.gem');
     expect(marker).not.toBeNull();
     expect(marker!.classList.contains('gem--1')).toBe(true);
+    // The stone is a four-point diamond polygon (not a rotated square).
+    const stone = marker!.querySelector('polygon.gem__stone');
+    expect(stone).not.toBeNull();
+    expect(stone!.getAttribute('points')).toBe('50,6 94,50 50,94 6,50');
     expect(marker!.querySelector('.gem__letter')?.textContent).toBe('R'); // colorblind cue
     expect(c5.getAttribute('aria-label')).toContain('red diamond');
 

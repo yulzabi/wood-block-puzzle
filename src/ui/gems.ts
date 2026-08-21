@@ -36,8 +36,10 @@ function svgEl(name: string, attrs: Record<string, string>): SVGElement {
 
 /**
  * A colored diamond marker for gem `color`: an inline SVG (scales to any cell
- * size) of a rotated, rounded, faceted stone with an upright letter cue. Purely
- * decorative — `aria-hidden`; the semantic color lives in the host cell's label.
+ * size) of a faceted diamond with an upright letter cue. The stone is an
+ * explicit four-point diamond polygon (rotation-independent, so it always reads
+ * as a diamond), with a top-half facet highlight. Purely decorative —
+ * `aria-hidden`; the semantic color lives in the host cell's label.
  */
 export function buildGemMarker(color: number): SVGElement {
   const svg = svgEl('svg', {
@@ -47,10 +49,11 @@ export function buildGemMarker(color: number): SVGElement {
   });
   (svg as SVGElement & { style: CSSStyleDeclaration }).style.setProperty('--gem', `var(--gem-${color})`);
 
-  const g = svgEl('g', { transform: 'rotate(45 50 50)' });
-  g.append(
-    svgEl('rect', { class: 'gem__stone', x: '24', y: '24', width: '52', height: '52', rx: '12' }),
-    svgEl('rect', { class: 'gem__facet', x: '24', y: '24', width: '52', height: '24', rx: '12' }),
+  svg.append(
+    // Four-point diamond (top, right, bottom, left).
+    svgEl('polygon', { class: 'gem__stone', points: '50,6 94,50 50,94 6,50' }),
+    // Upper-half facet highlight.
+    svgEl('polygon', { class: 'gem__facet', points: '50,6 94,50 50,50 6,50' }),
   );
 
   const text = svgEl('text', {
@@ -62,6 +65,6 @@ export function buildGemMarker(color: number): SVGElement {
   });
   text.textContent = GEM_COLOR_LETTERS[color] ?? String(color);
 
-  svg.append(g, text);
+  svg.append(text);
   return svg;
 }

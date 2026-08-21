@@ -172,9 +172,11 @@
   fill: var(--gem);
   stroke: rgba(0, 0, 0, 0.4);
   stroke-width: 3;
+  stroke-linejoin: round; /* soften the diamond's four corners */
 }
 .gem__facet {
   fill: rgba(255, 255, 255, 0.3);
+  stroke-linejoin: round;
 }
 .gem__letter {
   fill: #fff;
