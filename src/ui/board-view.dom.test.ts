@@ -39,16 +39,35 @@ describe('BoardView (DOM)', () => {
     expect(c1.getAttribute('aria-label')).toContain('empty');
   });
 
-  it('marks target cells and labels them "target block"', () => {
+  it('renders a colored gem diamond on gem cells and labels them by color', () => {
     const board = createBoard();
     const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
     board[5] = 2;
-    gems[5] = 1;
+    gems[5] = 1; // color 1 = red
     view.renderBoard(board, gems);
 
     const c5 = cells()[5]!;
-    expect(c5.classList.contains('target')).toBe(true);
-    expect(c5.getAttribute('aria-label')).toContain('target block');
+    const marker = c5.querySelector('.gem');
+    expect(marker).not.toBeNull();
+    expect(marker!.classList.contains('gem--1')).toBe(true);
+    expect(marker!.querySelector('.gem__letter')?.textContent).toBe('R'); // colorblind cue
+    expect(c5.getAttribute('aria-label')).toContain('red diamond');
+
+    // A cell without a gem has no marker.
+    expect(cells()[6]!.querySelector('.gem')).toBeNull();
+  });
+
+  it('reconciles gem markers: a cleared gem cell drops its diamond on re-render', () => {
+    const board = createBoard();
+    const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+    board[5] = 2;
+    gems[5] = 3;
+    view.renderBoard(board, gems);
+    expect(cells()[5]!.querySelector('.gem--3')).not.toBeNull();
+
+    // Gem gone (cleared): marker removed, exactly one .gem never lingers.
+    view.renderBoard(createBoard(), new Uint8Array(BOARD_SIZE * BOARD_SIZE));
+    expect(cells()[5]!.querySelector('.gem')).toBeNull();
   });
 
   it('reconciles: a previously-filled cell clears on the next render', () => {

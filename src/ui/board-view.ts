@@ -12,6 +12,7 @@
 import type { Board, Coord } from '../core/types';
 import { BOARD_SIZE } from '../core/types';
 import { idx, inBounds } from '../core/board';
+import { buildGemMarker, gemColorName } from './gems';
 
 /** Everything needed to map a client point onto the grid. */
 export interface GridMetrics {
@@ -49,6 +50,8 @@ export class BoardView {
   private previewed: HTMLElement[] = [];
   /** Cells currently glowing with the line-completion hint. */
   private lineHinted: HTMLElement[] = [];
+  /** Gem color currently rendered on each cell (0 = none), for reconciliation. */
+  private readonly cellGem = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
   /** Cached grid geometry; null = must re-measure. See metrics(). */
   private cachedMetrics: GridMetrics | null = null;
 
@@ -85,9 +88,9 @@ export class BoardView {
 
   /**
    * Reconcile every cell to empty or a wood-tone block by material index.
-   * In Levels mode a `gems` channel (>0 = a gem block that must still be cleared)
-   * marks those cells as goal blockers; endless passes nothing. (Per-color gem
-   * visuals arrive in a later slice; for now the marker is the goal ring.)
+   * In Levels mode a `gems` channel (>0 = that cell's gem color) renders a
+   * colored diamond marker on the cell (the objective to clear); endless passes
+   * nothing. Gem markers are reconciled so only changed cells rebuild.
    */
   renderBoard(board: Board, gems?: Uint8Array): void {
     for (let i = 0; i < this.cells.length; i++) {
@@ -101,12 +104,18 @@ export class BoardView {
         cell.classList.remove('filled');
         cell.style.removeProperty('--block');
       }
-      const isTarget = !!gems && (gems[i] ?? 0) !== 0;
-      cell.classList.toggle('target', isTarget);
+
+      // Gem diamond: add/update/remove only when the cell's gem color changes.
+      const gemColor = gems ? gems[i] ?? 0 : 0;
+      if (gemColor !== this.cellGem[i]) {
+        cell.querySelector('.gem')?.remove();
+        if (gemColor > 0) cell.append(buildGemMarker(gemColor));
+        this.cellGem[i] = gemColor;
+      }
 
       const row = Math.floor(i / BOARD_SIZE);
       const col = i % BOARD_SIZE;
-      const desc = isTarget ? 'target block' : material > 0 ? 'filled' : 'empty';
+      const desc = gemColor > 0 ? `${gemColorName(gemColor)} diamond` : material > 0 ? 'filled' : 'empty';
       cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, ${desc}`);
     }
   }

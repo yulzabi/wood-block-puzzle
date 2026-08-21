@@ -58,4 +58,26 @@ describe('TrayView (DOM)', () => {
     tray.setDragging('abc', false);
     expect(tray.pieceElement('abc')!.classList.contains('dragging')).toBe(false);
   });
+
+  it('renders a gem diamond on the gem-bearing cell and names it in the aria-label', () => {
+    const tray = new TrayView(container);
+    const p: Piece = { ...piece('p1', 0, 2), gems: { 0: 2 } }; // cell 0 carries color 2 (blue)
+    tray.renderTray([p]);
+
+    const el = tray.pieceElement('p1')!;
+    const marker = el.querySelector('.gem');
+    expect(marker).not.toBeNull();
+    expect(marker!.classList.contains('gem--2')).toBe(true);
+    expect(el.getAttribute('aria-label')).toContain('carrying blue gem');
+  });
+
+  it('gemless pieces carry no gem marker and no gem suffix', () => {
+    const tray = new TrayView(container);
+    const p = piece('p1', 0, 2);
+    tray.renderTray([p]);
+
+    const el = tray.pieceElement('p1')!;
+    expect(el.querySelector('.gem')).toBeNull();
+    expect(el.getAttribute('aria-label')).toBe(describePiece(p.shape));
+  });
 });

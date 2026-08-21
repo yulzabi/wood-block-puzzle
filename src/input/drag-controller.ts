@@ -110,7 +110,7 @@ export class DragController {
 
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
-    ghost.append(buildPieceGrid(piece.shape, piece.material, cell, gap));
+    ghost.append(buildPieceGrid(piece.shape, piece.material, cell, gap, piece.gems));
     document.body.append(ghost);
 
     pieceEl.classList.add('dragging');

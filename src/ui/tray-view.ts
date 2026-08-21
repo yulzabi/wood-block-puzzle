@@ -9,6 +9,7 @@
 
 import type { Piece, Shape } from '../core/types';
 import { TRAY_SIZE } from '../core/types';
+import { buildGemMarker, gemColorName } from './gems';
 
 /** Cell size / gap used to render pieces inside the tray (px). */
 export const TRAY_CELL = 22;
@@ -31,12 +32,25 @@ export function describePiece(shape: Shape): string {
   return `${name}, ${n} ${cells}`;
 }
 
-/** Build a grid of wood blocks laid out to a shape (reused for the drag ghost). */
+/** aria-label suffix naming any gems a piece carries (empty for gemless pieces). */
+function gemSuffix(piece: Piece): string {
+  if (!piece.gems) return '';
+  const names = Object.values(piece.gems).map(gemColorName);
+  if (names.length === 0) return '';
+  return `, carrying ${names.join(' and ')} gem${names.length > 1 ? 's' : ''}`;
+}
+
+/**
+ * Build a grid of wood blocks laid out to a shape (reused for the drag ghost).
+ * If `gems` is given (shape-cell index -> gem color), a colored diamond is drawn
+ * on those cells so the player sees which incoming piece carries which gems.
+ */
 export function buildPieceGrid(
   shape: Shape,
   material: number,
   cellPx: number,
   gapPx: number,
+  gems?: Readonly<Record<number, number>>,
 ): HTMLElement {
   const grid = document.createElement('div');
   grid.className = 'piece-grid';
@@ -44,14 +58,16 @@ export function buildPieceGrid(
   grid.style.gridTemplateRows = `repeat(${shape.height}, ${cellPx}px)`;
   grid.style.gap = `${gapPx}px`;
 
-  for (const c of shape.cells) {
+  shape.cells.forEach((c, k) => {
     const block = document.createElement('div');
     block.className = 'block';
     block.style.gridColumn = String(c.col + 1);
     block.style.gridRow = String(c.row + 1);
     block.style.setProperty('--block', `var(--wood-${material})`);
+    const gemColor = gems?.[k];
+    if (gemColor) block.append(buildGemMarker(gemColor));
     grid.append(block);
-  }
+  });
   return grid;
 }
 
@@ -84,8 +100,8 @@ export class TrayView {
       pieceEl.dataset['pieceId'] = piece.id;
       pieceEl.tabIndex = 0;
       pieceEl.setAttribute('role', 'button');
-      pieceEl.setAttribute('aria-label', describePiece(piece.shape));
-      pieceEl.append(buildPieceGrid(piece.shape, piece.material, TRAY_CELL, TRAY_GAP));
+      pieceEl.setAttribute('aria-label', describePiece(piece.shape) + gemSuffix(piece));
+      pieceEl.append(buildPieceGrid(piece.shape, piece.material, TRAY_CELL, TRAY_GAP, piece.gems));
       slot.append(pieceEl);
     }
   }

@@ -20,6 +20,15 @@
   --cell-empty: #6b4a2c;     /* empty cell */
   --cell-empty-hi: #7a5636;  /* empty cell highlight edge */
 
+  /* Gem colors (index 1..6 -> --gem-N). Saturated + distinct, paired with a
+     letter cue in the marker so they read without relying on hue. */
+  --gem-1: #e5484d; /* red    (R) */
+  --gem-2: #4a72ff; /* blue   (B) */
+  --gem-3: #46c26a; /* green  (G) */
+  --gem-4: #ffc53d; /* amber  (A) */
+  --gem-5: #b25fd8; /* purple (P) */
+  --gem-6: #3fd0d6; /* cyan   (C) */
+
   /* Preview highlight */
   --preview-valid: #6fbf73;
   --preview-invalid: #d9534f;
