@@ -55,6 +55,11 @@ export class DragController {
   private readonly cfg: DragConfig;
   private interactive = true;
   private session: DragSession | null = null;
+  /** Latest pointer position, applied once per frame (see onPointerMove). */
+  private moveX = 0;
+  private moveY = 0;
+  /** Pending requestAnimationFrame id for a coalesced update, or 0 if none. */
+  private rafId = 0;
 
   constructor(cfg: DragConfig) {
     this.cfg = cfg;
@@ -132,13 +137,33 @@ export class DragController {
 
   private readonly onPointerMove = (e: PointerEvent): void => {
     if (!this.session || e.pointerId !== this.session.pointerId) return;
-    this.update(e.clientX, e.clientY);
+    // Coalesce: keep only the latest position and apply it once per frame, so
+    // multiple pointermoves within a frame (e.g. 120Hz iPads) collapse into a
+    // single preview/ghost update aligned to the compositor.
+    this.moveX = e.clientX;
+    this.moveY = e.clientY;
+    if (this.rafId === 0) this.rafId = requestAnimationFrame(this.flushMove);
     e.preventDefault();
   };
+
+  private readonly flushMove = (): void => {
+    this.rafId = 0;
+    if (this.session) this.update(this.moveX, this.moveY);
+  };
+
+  private cancelPendingFrame(): void {
+    if (this.rafId !== 0) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = 0;
+    }
+  }
 
   private readonly onPointerUp = (e: PointerEvent): void => {
     const s = this.session;
     if (!s || e.pointerId !== s.pointerId) return;
+    // Apply the release position synchronously — a coalesced move may be pending.
+    this.cancelPendingFrame();
+    this.update(e.clientX, e.clientY);
     const commit = s.origin !== null && s.valid;
     if (commit && s.origin) {
       this.cfg.onPlace({ type: 'place', pieceId: s.piece.id, at: s.origin });
@@ -214,6 +239,7 @@ export class DragController {
     const s = this.session;
     if (!s) return;
     this.session = null;
+    this.cancelPendingFrame();
 
     // Remove listeners from the element they were bound to at pickup — NOT from
     // e.currentTarget, which is null on pointercancel/lostpointercapture and
