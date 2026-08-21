@@ -18,14 +18,23 @@ const MAX_TARGETS = 28;
 /** Keep at least one empty cell in every row/column so no line starts full. */
 const MAX_PER_LINE = BOARD_SIZE - 1;
 
-/** Number of pre-placed target blocks for a level: 6 at level 1, +2/level, capped at 28. */
+/**
+ * Number of pre-placed target blocks for a level. Gentle +1/level opening
+ * (4,5,6,7,8 for levels 1–5) with a quadratic term that accelerates the ramp
+ * from ~level 6 on (10,12,14,16,19,22,25,28), capped at 28.
+ */
 export function targetCountForLevel(level: number): number {
-  return Math.min(4 + Math.max(1, level) * 2, MAX_TARGETS);
+  const lvl = Math.max(1, level);
+  return Math.min(3 + lvl + Math.floor(Math.max(0, lvl - 3) ** 2 / 8), MAX_TARGETS);
 }
 
-/** Score needed to clear a level: 100 at level 1, +60 per level thereafter. */
+/**
+ * Score needed to clear a score-goal level. Convex curve — small early jumps,
+ * larger later: 100, 160, 240, 340, 460, 600, … (was a flat +60/level line).
+ */
 export function targetScoreForLevel(level: number): number {
-  return 100 + Math.max(0, level - 1) * 60;
+  const lvl = Math.max(1, level);
+  return 100 + 50 * (lvl - 1) + 10 * (lvl - 1) ** 2;
 }
 
 /**

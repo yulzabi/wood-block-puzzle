@@ -80,4 +80,14 @@ describe('generateLevel', () => {
       expect(placed).toBeGreaterThanOrEqual(Math.ceil(want / 2));
     }
   });
+
+  it('ramps gently early, then accelerates (convex difficulty curve)', () => {
+    // Target count: +1 per level early, a larger step later.
+    expect(targetCountForLevel(2) - targetCountForLevel(1)).toBe(1);
+    expect(targetCountForLevel(3) - targetCountForLevel(2)).toBe(1);
+    expect(targetCountForLevel(8) - targetCountForLevel(7)).toBeGreaterThan(1);
+    // Target score: strictly larger jumps at higher levels.
+    const jump = (n: number): number => targetScoreForLevel(n + 1) - targetScoreForLevel(n);
+    expect(jump(1)).toBeLessThan(jump(5));
+  });
 });
