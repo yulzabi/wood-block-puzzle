@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # npm dependencies. The project intentionally pins bleeding-edge majors
+  # (TypeScript 7, Vite 8, Lighthouse 13, Vitest 4); group updates into a single
+  # weekly PR so CI (typecheck + test + build) reviews them together. Watch the
+  # two fragile scrapers on any bump: scripts/run-lighthouse.mjs (SW precache +
+  # Lighthouse category iteration) and scripts/generate-icons.mjs.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+
+  # Keep the GitHub Actions used by ci.yml / deploy.yml current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
