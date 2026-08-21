@@ -19,8 +19,29 @@ const BASE = process.env.VITE_BASE ?? '/';
 export default defineConfig({
   base: BASE,
   test: {
+    // Default env is node (fast); DOM/component tests opt in per-file with a
+    // `// @vitest-environment happy-dom` docblock (see src/ui/*.dom.test.ts).
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**'],
+      // Exclude tests, type decls, and the thin browser-only entry/bootstrap
+      // (main.ts registers the SW; it isn't unit-testable in isolation).
+      exclude: ['src/**/*.test.ts', 'src/**/*.d.ts', 'src/main.ts'],
+      // Floors set just under the measured baseline so they guard against
+      // erosion without being instantly red. The pure logic layers carry a
+      // much higher bar than the DOM/orchestration layers.
+      thresholds: {
+        statements: 40,
+        branches: 45,
+        functions: 38,
+        lines: 40,
+        'src/core/**': { statements: 95, branches: 88, functions: 100, lines: 95 },
+        'src/platform/**': { statements: 85, branches: 78, functions: 95, lines: 88 },
+      },
+    },
   },
   plugins: isTest ? [] : [
     VitePWA({
