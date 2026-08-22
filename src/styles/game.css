@@ -599,48 +599,42 @@
   font-weight: 800;
 }
 
-/* Scrollable trail. A central "rope" runs down the middle; nodes zig-zag around
-   it like beads on a winding path. */
+/* Scrollable trail: nodes are absolutely placed on a slalom curve inside a
+   sized inner canvas, connected by a rope path. Scroll is contained here. */
 .level-trail {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  padding: 20px 0 32px;
 }
-.level-trail::before {
-  content: '';
+.level-trail-inner {
+  position: relative;
+  width: 100%;
+}
+.level-trail-path {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 6px;
-  transform: translateX(-50%);
-  border-radius: 3px;
-  background: repeating-linear-gradient(
-    180deg,
-    var(--wood-3) 0,
-    var(--wood-3) 10px,
-    var(--wood-5) 10px,
-    var(--wood-5) 20px
-  );
-  opacity: 0.5;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
-/* Zig-zag the medallions off the central rope. */
-.level-node:nth-child(odd) { transform: translateX(-46px); }
-.level-node:nth-child(even) { transform: translateX(46px); }
+.level-trail-path path {
+  fill: none;
+  stroke: var(--wood-3);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
 
 .level-node {
-  position: relative;
+  position: absolute;
+  transform: translate(-50%, -50%); /* centered exactly on its curve point */
   z-index: 1;
-  flex: 0 0 auto;
-  width: 66px;
-  height: 66px;
+  width: 64px;
+  height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -657,7 +651,7 @@
     inset 0 2px 0 rgba(255, 255, 255, 0.25),
     inset 0 -4px 6px rgba(0, 0, 0, 0.3);
 }
-.level-node:active { transform: translateY(2px) translateX(var(--zig, 0)); }
+.level-node:active { transform: translate(-50%, calc(-50% + 2px)); }
 .level-node-num {
   font-size: 22px;
   font-weight: 800;
@@ -669,10 +663,6 @@
   color: #ffe08a;
   font-variant-numeric: tabular-nums;
 }
-.level-node-lock {
-  font-size: 16px;
-  line-height: 1;
-}
 
 /* Completed: a warm gold ring. */
 .level-node--completed {
@@ -681,10 +671,12 @@
     inset 0 2px 0 rgba(255, 255, 255, 0.3),
     0 0 0 3px rgba(255, 208, 120, 0.85);
 }
-/* Locked: dimmed, not interactive. */
+/* Locked: a dim, undiscovered "?" place. */
 .level-node--locked {
   cursor: default;
-  filter: grayscale(0.5) brightness(0.6);
+  filter: grayscale(0.6) brightness(0.5);
+}
+.level-node--locked .level-node-num {
   color: var(--text-dim);
 }
 /* Current focal node: brighter ring + a gentle pulse (disabled under reduced motion). */
@@ -697,7 +689,7 @@
 }
 @keyframes node-pulse {
   0%, 100% { box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.35), 0 0 0 4px var(--preview-valid); }
-  50% { box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.35), 0 0 0 8px rgba(111, 191, 115, 0.35); }
+  50% { box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.35), 0 0 0 9px rgba(111, 191, 115, 0.4); }
 }
 
 /* ---- Level card (opened from a map node) ---- */

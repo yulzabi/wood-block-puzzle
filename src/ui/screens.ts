@@ -620,29 +620,40 @@ function levelNodeButton(node: LevelMapNode, onPlay: (level: number) => void): H
   btn.setAttribute('aria-label', label);
 
   const num = el('span', 'level-node-num');
-  num.textContent = String(node.level);
+  num.textContent = locked ? '?' : String(node.level); // locked = an undiscovered place
   btn.append(num);
 
-  if (node.state === 'completed') {
+  if (!locked && node.state === 'completed') {
     const score = el('span', 'level-node-score');
     score.textContent = String(node.bestScore);
     btn.append(score);
-  }
-  if (locked) {
-    const lock = el('span', 'level-node-lock');
-    lock.textContent = '🔒';
-    lock.setAttribute('aria-hidden', 'true');
-    btn.append(lock);
   }
 
   if (!locked) btn.addEventListener('click', () => onPlay(node.level));
   return btn;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Vertical rhythm + horizontal sway of the winding trail (map coordinates). */
+const TRAIL_TOP = 60;
+const TRAIL_ROW = 100; // px between successive nodes
+const TRAIL_BOTTOM = 60;
+const TRAIL_MID = 50; // % horizontal center
+const TRAIL_AMP = 30; // % sway amplitude (slalom)
+
+/** Horizontal position (%) of node `i` — a smooth slalom weave. */
+function trailX(i: number): number {
+  return TRAIL_MID + TRAIL_AMP * Math.sin(i * 0.9);
+}
+
 /**
- * Populate the Level Map: a scrollable winding trail of level nodes. Each node
- * carries its own state + focal flag (decided by the caller via nextLevelToPlay),
- * so this renderer never re-derives which node glows.
+ * Populate the Level Map: a scrollable winding SLALOM trail of level nodes.
+ * Nodes are absolutely positioned on the curve (so their hit areas sit exactly
+ * where they're drawn), connected by a rope path. Each node carries its own
+ * state + focal flag (decided by the caller via nextLevelToPlay), so this
+ * renderer never re-derives which node glows. Scrolling is contained to the
+ * trail — it never scrolls the document.
  */
 export function renderLevelMap(screen: HTMLElement, opts: LevelMapOpts): void {
   screen.textContent = '';
@@ -660,14 +671,49 @@ export function renderLevelMap(screen: HTMLElement, opts: LevelMapOpts): void {
   title.textContent = 'Levels';
   header.append(back, title);
 
-  const trail = el('div', 'level-trail');
-  for (const node of opts.nodes) trail.append(levelNodeButton(node, opts.onPlay));
+  const trail = el('div', 'level-trail'); // scroll container
+  const inner = el('div', 'level-trail-inner'); // sized canvas the nodes sit on
+  const n = opts.nodes.length;
+  const height = TRAIL_TOP + Math.max(0, n - 1) * TRAIL_ROW + TRAIL_BOTTOM;
+  inner.style.height = `${height}px`;
 
+  // The rope: a path through every node, stroke kept constant via non-scaling-stroke.
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'level-trail-path');
+  svg.setAttribute('viewBox', `0 0 100 ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('vector-effect', 'non-scaling-stroke');
+  let d = '';
+  opts.nodes.forEach((_, i) => {
+    d += `${i === 0 ? 'M' : 'L'} ${trailX(i).toFixed(2)} ${TRAIL_TOP + i * TRAIL_ROW} `;
+  });
+  path.setAttribute('d', d.trim());
+  svg.append(path);
+  inner.append(svg);
+
+  opts.nodes.forEach((node, i) => {
+    const btn = levelNodeButton(node, opts.onPlay);
+    btn.style.left = `${trailX(i)}%`;
+    btn.style.top = `${TRAIL_TOP + i * TRAIL_ROW}px`;
+    inner.append(btn);
+  });
+
+  trail.append(inner);
   wrap.append(header, trail);
   screen.append(wrap);
 
-  // Bring the focal node into view (no-op where scrollIntoView is unavailable).
-  trail.querySelector<HTMLElement>('.level-node--current')?.scrollIntoView?.({ block: 'center' });
+  // Center the focal node within the trail's own scroll (never the document).
+  const currentIndex = opts.nodes.findIndex((nd) => nd.current);
+  if (currentIndex >= 0) {
+    const y = TRAIL_TOP + currentIndex * TRAIL_ROW;
+    const scroll = (): void => {
+      trail.scrollTop = Math.max(0, y - trail.clientHeight / 2);
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scroll);
+    else scroll();
+  }
 }
 
 /** Options for the per-level card (opened from a map node). */

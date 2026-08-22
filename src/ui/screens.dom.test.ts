@@ -156,6 +156,9 @@ describe('screens (DOM)', () => {
     // Current focal node: highlighted, labeled "current", clickable -> onPlay.
     expect(nodes[1]!.classList.contains('level-node--current')).toBe(true);
     expect(nodes[1]!.getAttribute('aria-label')).toBe('Level 2, current');
+    // Nodes are absolutely placed on the curve (hit area sits where it's drawn).
+    expect(nodes[1]!.style.left).not.toBe('');
+    expect(nodes[1]!.style.top).not.toBe('');
     nodes[1]!.click();
     expect(onPlay).toHaveBeenCalledWith(2);
 
