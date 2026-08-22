@@ -31,6 +31,9 @@ import {
   loadLevelResults,
   levelResult,
   nextLevelToPlay,
+  saveGame,
+  loadGame,
+  clearSave,
   loadSettings,
   saveSettings,
   loadStats,
@@ -178,6 +181,17 @@ export class App {
     this.keyboard.attach();
     this.syncHintButton();
 
+    // Persist the in-progress game when the app is backgrounded or the tab is
+    // hidden/closed, so an iOS app-switch or a service-worker "Refresh" doesn't
+    // nuke it. Only save while actually playing.
+    const persistIfPlaying = (): void => {
+      if (this.state.status === 'playing') saveGame(this.state);
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') persistIfPlaying();
+    });
+    window.addEventListener('pagehide', persistIfPlaying);
+
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
     this.screens.show('home');
@@ -199,7 +213,14 @@ export class App {
 
   /** Render the home menu and (re)attach the install affordance below it. */
   private renderHomeScreen(): void {
+    // Offer Continue only when a valid in-progress game is saved.
+    const saved = loadGame();
+    const resumable = saved !== null && saved.status === 'playing';
     renderHome(this.screens.home, {
+      canContinue: resumable,
+      onContinue: () => {
+        if (saved && saved.status === 'playing') this.continueGame(saved);
+      },
       onLevels: () => this.showLevelMap(),
       onEndless: () => this.playEndless(),
       currentLevel: loadLevelProgress(),
@@ -208,6 +229,12 @@ export class App {
       onHowTo: () => this.showIntro(),
     });
     if (this.installAffordance) this.screens.home.append(this.installAffordance.el);
+  }
+
+  /** Resume a saved in-progress game, re-entering its mode/screen from the snapshot. */
+  private continueGame(saved: GameState): void {
+    this.state = saved;
+    this.enterGame(); // renders board/tray/HUD (incl. gem HUD) from the snapshot
   }
 
   // ---- Level Map ----
@@ -372,6 +399,9 @@ export class App {
     this.syncHintButton();
     this.screens.show('game');
     this.setInteractive(true);
+    // This in-progress game becomes the resumable save (overwriting any stale one),
+    // so starting/continuing a game is always what Continue would resume.
+    saveGame(this.state);
     if (this.state.mode === 'levels') {
       this.announce(this.objectiveMessage());
     } else {
@@ -549,6 +579,8 @@ export class App {
         this.onLevelFailed();
         return;
       default:
+        // Still playing — snapshot so a reload/backgrounding resumes this move.
+        saveGame(this.state);
         this.setInteractive(true);
     }
   }
@@ -597,6 +629,7 @@ export class App {
 
   // ---- Endless game over ----
   private endGame(): void {
+    clearSave(); // a finished game must not be resumable
     const prevHigh = loadHighScore();
     const isNewHigh = this.state.score > prevHigh;
     saveHighScore(this.state.highScore);
@@ -619,6 +652,7 @@ export class App {
 
   // ---- Levels ----
   private onLevelComplete(): void {
+    clearSave(); // level cleared — not resumable
     // Unlock the next level and record this level's result (for the Level Map).
     saveLevelProgress(this.state.level + 1);
     saveLevelResult(this.state.level, { score: this.state.score, completed: true });
@@ -637,6 +671,7 @@ export class App {
   }
 
   private onLevelFailed(): void {
+    clearSave(); // level failed — not resumable
     renderLevelFailed(this.screens.gameover, {
       level: this.state.level,
       onRetry: () => this.retryCurrentLevel(),
@@ -660,7 +695,10 @@ export class App {
       message: 'Your current game will end.',
       confirmLabel: 'Quit',
       cancelLabel: 'Keep playing',
-      onConfirm: () => this.goHome(),
+      onConfirm: () => {
+        clearSave(); // abandoned game — not resumable
+        this.goHome();
+      },
       onCancel: () => this.resumeGame(),
     });
     this.screens.show('overlay');

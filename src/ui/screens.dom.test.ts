@@ -7,6 +7,7 @@ import {
   renderSettings,
   renderLevelMap,
   renderLevelCard,
+  renderHome,
 } from './screens';
 
 function buttonByText(root: HTMLElement, text: string): HTMLButtonElement {
@@ -168,6 +169,32 @@ describe('screens (DOM)', () => {
 
     buttonByText(s.levelmap, '← Menu').click();
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it('renderHome shows a Continue button only when a game is resumable', () => {
+    const s = createScreens(root);
+    const base = {
+      onLevels: vi.fn(),
+      onEndless: vi.fn(),
+      currentLevel: 1,
+      onSettings: vi.fn(),
+      onStats: vi.fn(),
+      onHowTo: vi.fn(),
+    };
+
+    // No resumable game -> no Continue button (don't show a dead button).
+    renderHome(s.home, { ...base, canContinue: false, onContinue: vi.fn() });
+    expect(Array.from(s.home.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
+
+    // Resumable game -> Continue appears and is wired.
+    const onContinue = vi.fn();
+    renderHome(s.home, { ...base, canContinue: true, onContinue });
+    const cont = Array.from(s.home.querySelectorAll<HTMLButtonElement>('button')).find(
+      (b) => b.textContent === 'Continue',
+    );
+    expect(cont).toBeDefined();
+    cont!.click();
+    expect(onContinue).toHaveBeenCalledOnce();
   });
 
   it('renderLevelCard shows the objective + best score and wires Replay for a completed level', () => {

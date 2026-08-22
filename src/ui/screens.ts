@@ -255,12 +255,15 @@ export interface HomeOpts {
   onEndless(): void;
   /** The level the player will resume at (shown as a hint). */
   currentLevel: number;
+  /** Whether a resumable in-progress game exists (shows the Continue button). */
+  canContinue: boolean;
+  onContinue(): void;
   onSettings(): void;
   onStats(): void;
   onHowTo(): void;
 }
 
-/** Populate the home screen (title + a mode menu: Levels / Endless). */
+/** Populate the home screen (title + a mode menu: Continue / Levels / Endless). */
 export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   home.textContent = '';
 
@@ -271,6 +274,16 @@ export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   subtitle.textContent = 'Fit the blocks. Clear the lines.';
 
   const menu = el('div', 'home-menu');
+
+  // Continue is only rendered when a resumable game exists (no dead button).
+  if (opts.canContinue) {
+    const cont = document.createElement('button');
+    cont.className = 'btn btn--primary home-continue';
+    cont.type = 'button';
+    cont.textContent = 'Continue';
+    cont.addEventListener('click', opts.onContinue);
+    menu.append(cont);
+  }
 
   const levels = document.createElement('button');
   levels.className = 'btn btn--primary';
