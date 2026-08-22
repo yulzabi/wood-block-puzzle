@@ -255,15 +255,16 @@ export interface HomeOpts {
   onEndless(): void;
   /** The level the player will resume at (shown as a hint). */
   currentLevel: number;
-  /** Whether a resumable in-progress game exists (shows the Continue button). */
-  canContinue: boolean;
-  onContinue(): void;
   onSettings(): void;
   onStats(): void;
   onHowTo(): void;
 }
 
-/** Populate the home screen (title + a mode menu: Continue / Levels / Endless). */
+/**
+ * Populate the home screen (title + a mode menu: Levels / Endless). Resume is
+ * contextual — the Endless button prompts Continue/New, and the Level Map's node
+ * offers Continue — so there is no separate Home "Continue" button.
+ */
 export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   home.textContent = '';
 
@@ -274,16 +275,6 @@ export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   subtitle.textContent = 'Fit the blocks. Clear the lines.';
 
   const menu = el('div', 'home-menu');
-
-  // Continue is only rendered when a resumable game exists (no dead button).
-  if (opts.canContinue) {
-    const cont = document.createElement('button');
-    cont.className = 'btn btn--primary home-continue';
-    cont.type = 'button';
-    cont.textContent = 'Continue';
-    cont.addEventListener('click', opts.onContinue);
-    menu.append(cont);
-  }
 
   const levels = document.createElement('button');
   levels.className = 'btn btn--primary';
@@ -736,11 +727,13 @@ export interface LevelCardOpts {
   readonly bestScore: number;
   /** Human objective summary, e.g. "Clear 5 blue gems" or "Reach 100 points". */
   readonly objective: string;
+  /** True when this exact level has a resumable in-progress save (→ "Continue"). */
+  readonly resumable: boolean;
   onPlay(): void;
   onClose(): void;
 }
 
-/** Populate the level card overlay: objective, best score, Play/Replay, Back. */
+/** Populate the level card overlay: objective, best score, Continue/Play/Replay, Back. */
 export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void {
   overlay.textContent = '';
   overlay.classList.add('overlay');
@@ -751,7 +744,7 @@ export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void
   label.textContent = `LEVEL ${opts.level}`;
 
   const objective = el('p', 'level-card-objective');
-  objective.textContent = opts.objective;
+  objective.textContent = opts.resumable ? 'Game in progress' : opts.objective;
 
   const best = el('p', 'gameover-best');
   best.textContent = opts.completed ? `Best ${opts.bestScore}` : 'Not cleared yet';
@@ -759,7 +752,7 @@ export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void
   const play = document.createElement('button');
   play.className = 'btn btn--primary';
   play.type = 'button';
-  play.textContent = opts.completed ? 'Replay' : 'Play';
+  play.textContent = opts.resumable ? 'Continue' : opts.completed ? 'Replay' : 'Play';
   play.addEventListener('click', () => {
     (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
     opts.onPlay();

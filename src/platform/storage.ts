@@ -487,17 +487,3 @@ export function clearEndlessSave(): void {
 export function clearLevelsSave(): void {
   removeKey(SAVE_LEVELS_KEY);
 }
-
-// --- Transitional back-compat shims (removed once the app is rewired to the
-//     per-mode API in the next slice). The app still calls loadGame/clearSave. ---
-
-/** @deprecated Use loadEndlessSave/loadLevelsSave. Returns whichever is resumable. */
-export function loadGame(): GameState | null {
-  return loadLevelsSave() ?? loadEndlessSave();
-}
-
-/** @deprecated Use clearEndlessSave/clearLevelsSave. Clears both slots. */
-export function clearSave(): void {
-  clearEndlessSave();
-  clearLevelsSave();
-}

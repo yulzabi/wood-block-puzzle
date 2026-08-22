@@ -171,48 +171,58 @@ describe('screens (DOM)', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it('renderHome shows a Continue button only when a game is resumable', () => {
+  it('renderHome has no Continue button — resume is contextual (Endless prompt / map node)', () => {
     const s = createScreens(root);
-    const base = {
+    renderHome(s.home, {
       onLevels: vi.fn(),
       onEndless: vi.fn(),
       currentLevel: 1,
       onSettings: vi.fn(),
       onStats: vi.fn(),
       onHowTo: vi.fn(),
-    };
-
-    // No resumable game -> no Continue button (don't show a dead button).
-    renderHome(s.home, { ...base, canContinue: false, onContinue: vi.fn() });
+    });
     expect(Array.from(s.home.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
-
-    // Resumable game -> Continue appears and is wired.
-    const onContinue = vi.fn();
-    renderHome(s.home, { ...base, canContinue: true, onContinue });
-    const cont = Array.from(s.home.querySelectorAll<HTMLButtonElement>('button')).find(
-      (b) => b.textContent === 'Continue',
-    );
-    expect(cont).toBeDefined();
-    cont!.click();
-    expect(onContinue).toHaveBeenCalledOnce();
   });
 
-  it('renderLevelCard shows the objective + best score and wires Replay for a completed level', () => {
+  it('renderLevelCard shows Play/Replay for a non-resumable level, wired to onPlay', () => {
     const s = createScreens(root);
     const onPlay = vi.fn();
-    const onClose = vi.fn();
     renderLevelCard(s.overlay, {
       level: 5,
       completed: true,
       bestScore: 240,
       objective: 'Clear 5 blue gems',
+      resumable: false,
       onPlay,
-      onClose,
+      onClose: vi.fn(),
     });
 
     expect(s.overlay.querySelector('.level-card-objective')?.textContent).toBe('Clear 5 blue gems');
     expect(s.overlay.querySelector('.gameover-best')?.textContent).toContain('Best 240');
+    // Not resumable -> the completed level shows Replay (no Continue control).
+    expect(Array.from(s.overlay.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
     buttonByText(s.overlay, 'Replay').click();
+    expect(onPlay).toHaveBeenCalledOnce();
+  });
+
+  it('renderLevelCard shows a Continue control only when the level is resumable', () => {
+    const s = createScreens(root);
+    const onPlay = vi.fn();
+    renderLevelCard(s.overlay, {
+      level: 5,
+      completed: false,
+      bestScore: 0,
+      objective: 'Clear 5 blue gems',
+      resumable: true,
+      onPlay,
+      onClose: vi.fn(),
+    });
+
+    // The actual control renders (asserting the element, not just a flag).
+    const cont = buttonByText(s.overlay, 'Continue');
+    expect(cont).toBeDefined();
+    expect(s.overlay.querySelector('.level-card-objective')?.textContent).toBe('Game in progress');
+    cont.click();
     expect(onPlay).toHaveBeenCalledOnce();
   });
 });

@@ -32,8 +32,11 @@ import {
   levelResult,
   nextLevelToPlay,
   saveGame,
-  loadGame,
-  clearSave,
+  loadEndlessSave,
+  loadLevelsSave,
+  hasEndlessSave,
+  clearEndlessSave,
+  clearLevelsSave,
   loadSettings,
   saveSettings,
   loadStats,
@@ -213,16 +216,9 @@ export class App {
 
   /** Render the home menu and (re)attach the install affordance below it. */
   private renderHomeScreen(): void {
-    // Offer Continue only when a valid in-progress game is saved.
-    const saved = loadGame();
-    const resumable = saved !== null && saved.status === 'playing';
     renderHome(this.screens.home, {
-      canContinue: resumable,
-      onContinue: () => {
-        if (saved && saved.status === 'playing') this.continueGame(saved);
-      },
       onLevels: () => this.showLevelMap(),
-      onEndless: () => this.playEndless(),
+      onEndless: () => this.enterEndless(),
       currentLevel: loadLevelProgress(),
       onSettings: () => this.showSettings(),
       onStats: () => this.showStats(),
@@ -235,6 +231,35 @@ export class App {
   private continueGame(saved: GameState): void {
     this.state = saved;
     this.enterGame(); // renders board/tray/HUD (incl. gem HUD) from the snapshot
+  }
+
+  /**
+   * Home → Endless: if a resumable Endless game exists, ask Continue or New;
+   * otherwise start fresh directly.
+   */
+  private enterEndless(): void {
+    if (!hasEndlessSave()) {
+      this.playEndless();
+      return;
+    }
+    renderConfirm(this.screens.overlay, {
+      title: 'Continue your game?',
+      message: 'You have an Endless game in progress.',
+      // Cancel is the safe default (focused + Escape) — Continue keeps the game;
+      // the destructive "New game" is the explicit confirm.
+      confirmLabel: 'New game',
+      cancelLabel: 'Continue',
+      onConfirm: () => {
+        clearEndlessSave();
+        this.playEndless();
+      },
+      onCancel: () => {
+        const saved = loadEndlessSave();
+        if (saved) this.continueGame(saved);
+        else this.playEndless();
+      },
+    });
+    this.screens.show('overlay');
   }
 
   // ---- Level Map ----
@@ -282,12 +307,23 @@ export class App {
   /** Tapping an unlocked node opens a card to play (or replay) that level. */
   private showLevelCard(level: number): void {
     const res = levelResult(loadLevelResults(), level);
+    // A resumable save exists for THIS level? Then the card offers Continue.
+    const saved = loadLevelsSave();
+    const resumable = saved !== null && saved.level === level;
     renderLevelCard(this.screens.overlay, {
       level,
       completed: res.completed,
       bestScore: res.bestScore,
       objective: this.levelObjective(level),
-      onPlay: () => this.playLevels(level),
+      resumable,
+      onPlay: () => {
+        if (resumable && saved) {
+          this.continueGame(saved);
+        } else {
+          clearLevelsSave(); // Play/Replay starts fresh — drop any stale levels save
+          this.playLevels(level);
+        }
+      },
       onClose: () => this.showLevelMap(),
     });
     this.screens.show('overlay');
@@ -629,7 +665,7 @@ export class App {
 
   // ---- Endless game over ----
   private endGame(): void {
-    clearSave(); // a finished game must not be resumable
+    clearEndlessSave(); // a finished Endless game must not be resumable
     const prevHigh = loadHighScore();
     const isNewHigh = this.state.score > prevHigh;
     saveHighScore(this.state.highScore);
@@ -652,7 +688,7 @@ export class App {
 
   // ---- Levels ----
   private onLevelComplete(): void {
-    clearSave(); // level cleared — not resumable
+    clearLevelsSave(); // level cleared — not resumable
     // Unlock the next level and record this level's result (for the Level Map).
     saveLevelProgress(this.state.level + 1);
     saveLevelResult(this.state.level, { score: this.state.score, completed: true });
@@ -671,7 +707,7 @@ export class App {
   }
 
   private onLevelFailed(): void {
-    clearSave(); // level failed — not resumable
+    clearLevelsSave(); // level failed — not resumable
     renderLevelFailed(this.screens.gameover, {
       level: this.state.level,
       onRetry: () => this.retryCurrentLevel(),
