@@ -7,8 +7,9 @@
  * supply gradually as trays are dealt.
  */
 
-import type { Piece } from './types';
+import type { Board, Piece } from './types';
 import { MATERIAL_COUNT } from './types';
+import { hasAnyPlacement } from './board';
 import { SHAPES } from './shapes';
 import { nextInt } from './rng';
 
@@ -47,6 +48,42 @@ export function generatePieces(
   }
 
   return { pieces, rngState: state, nextSeq: seq };
+}
+
+/**
+ * True iff at least one UNPLACED piece in `tray` has a legal placement on
+ * `board` (reuses the board's `hasAnyPlacement`). Already-placed pieces are
+ * ignored — they cannot rescue a stuck hand. Pure.
+ */
+export function trayHasPlacement(board: Board, tray: readonly Piece[]): boolean {
+  return tray.some((p) => !p.placed && hasAnyPlacement(board, p.shape));
+}
+
+/**
+ * Draw an OPENING tray that is guaranteed to have a legal move against `board`
+ * (the solvability guarantee): if the drawn hand fits nowhere, re-draw —
+ * advancing the seeded RNG and the id sequence each time — until one fits or the
+ * retry cap is hit. Deterministic: a given `(board, rngState, startSeq)` always
+ * yields the same final tray, since the re-draws are part of the seeded
+ * sequence. Terminates unconditionally: on the (pathological) full board where
+ * nothing can fit, it returns the last draw after `retryLimit` re-draws rather
+ * than looping forever. Endless/score levels open on roomy boards, so this
+ * almost always returns the first draw unchanged.
+ */
+export function generateSolvableTray(
+  board: Board,
+  rngState: number,
+  startSeq: number,
+  count: number,
+  retryLimit = 20,
+): { pieces: Piece[]; rngState: number; nextSeq: number } {
+  let draw = generatePieces(rngState, startSeq, count);
+  let attempts = 0;
+  while (!trayHasPlacement(board, draw.pieces) && attempts < retryLimit) {
+    draw = generatePieces(draw.rngState, draw.nextSeq, count);
+    attempts++;
+  }
+  return draw;
 }
 
 /** Total gems remaining across all colors. */

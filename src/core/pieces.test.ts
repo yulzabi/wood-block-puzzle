@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { attachGems, generatePieces } from './pieces';
+import { attachGems, generatePieces, generateSolvableTray, trayHasPlacement } from './pieces';
 import { seedState } from './rng';
-import { MATERIAL_COUNT, TRAY_SIZE } from './types';
+import { BOARD_SIZE, MATERIAL_COUNT, TRAY_SIZE } from './types';
+import { createBoard, idx } from './board';
 import { SHAPES } from './shapes';
 import type { Piece } from './types';
 
@@ -101,5 +102,95 @@ describe('attachGems', () => {
     expect(a.pieces.map((p) => p.gems ?? null)).toEqual(b.pieces.map((p) => p.gems ?? null));
     expect(a.rngState).toBe(b.rngState);
     expect(a.supplyRemaining).toEqual(b.supplyRemaining);
+  });
+});
+
+// --- P8a: solvability guarantee (opening tray always has a legal move) ---
+
+/** A completely full board (nothing can ever be placed). */
+const fullBoard = (): Uint8Array => new Uint8Array(BOARD_SIZE * BOARD_SIZE).fill(1);
+
+/**
+ * A board whose only empty cells are isolated (no two orthogonally adjacent),
+ * so ONLY a 1x1 `single` can ever be placed.
+ */
+const onlySinglesFit = (): Uint8Array => {
+  const b = fullBoard();
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    b[idx(r, r)] = 0;
+    b[idx(r, (r + 4) % BOARD_SIZE)] = 0;
+  }
+  return b;
+};
+
+/** A seeded rng state whose next 3-piece deal contains no `single`. */
+const firstDrawNoSingle = (): number => {
+  for (let s = 1; s < 1_000_000; s++) {
+    const state = seedState(s);
+    const { pieces } = generatePieces(state, 0, TRAY_SIZE);
+    if (pieces.every((p) => p.shape.id !== 'single')) return state;
+  }
+  throw new Error('no no-single seed found');
+};
+
+describe('trayHasPlacement', () => {
+  it('is true when any unplaced piece fits and false when none do', () => {
+    const tray = generatePieces(seedState(1), 0, TRAY_SIZE).pieces;
+    expect(trayHasPlacement(createBoard(), tray)).toBe(true); // empty board fits anything
+    expect(trayHasPlacement(fullBoard(), tray)).toBe(false); // full board fits nothing
+  });
+
+  it('ignores already-placed pieces (a placed fitter does not count)', () => {
+    // Board full except a single empty cell — only a 1x1 can go there.
+    const board = fullBoard();
+    board[idx(0, 0)] = 0;
+    const single = SHAPES.find((s) => s.id === 'single')!;
+    const square = SHAPES.find((s) => s.id === 'square2')!;
+    const tray: Piece[] = [
+      { id: 'a', shape: single, material: 1, placed: true }, // fits, but already placed
+      { id: 'b', shape: square, material: 1, placed: false }, // 2x2 cannot fit one cell
+    ];
+    expect(trayHasPlacement(board, tray)).toBe(false);
+    // The same single, unplaced, would make it placeable.
+    expect(trayHasPlacement(board, [{ ...tray[0]!, placed: false }, tray[1]!])).toBe(true);
+  });
+});
+
+describe('generateSolvableTray', () => {
+  it('leaves a placeable opening tray unchanged (no re-draw on an empty board)', () => {
+    const solved = generateSolvableTray(createBoard(), seedState(42), 0, TRAY_SIZE);
+    const plain = generatePieces(seedState(42), 0, TRAY_SIZE);
+    expect(solved.pieces.map((p) => p.shape.id)).toEqual(plain.pieces.map((p) => p.shape.id));
+    expect(solved.rngState).toBe(plain.rngState); // advanced by exactly one draw
+    expect(solved.nextSeq).toBe(plain.nextSeq);
+  });
+
+  it('re-draws an unplaceable opening tray until a piece fits', () => {
+    const board = onlySinglesFit();
+    const state = firstDrawNoSingle();
+    const first = generatePieces(state, 0, TRAY_SIZE);
+    expect(trayHasPlacement(board, first.pieces)).toBe(false); // the raw draw is stuck
+
+    const solved = generateSolvableTray(board, state, 0, TRAY_SIZE, 200);
+    expect(trayHasPlacement(board, solved.pieces)).toBe(true); // re-drawn to a fitting hand
+    expect(solved.pieces.map((p) => p.shape.id)).not.toEqual(first.pieces.map((p) => p.shape.id));
+  });
+
+  it('is deterministic — same board + seed yields the same final tray', () => {
+    const board = onlySinglesFit();
+    const a = generateSolvableTray(board, seedState(3), 0, TRAY_SIZE, 200);
+    const b = generateSolvableTray(board, seedState(3), 0, TRAY_SIZE, 200);
+    expect(a.pieces.map((p) => p.shape.id)).toEqual(b.pieces.map((p) => p.shape.id));
+    expect(a.rngState).toBe(b.rngState);
+    expect(a.nextSeq).toBe(b.nextSeq);
+  });
+
+  it('terminates at the retry cap on a board where nothing fits (never hangs)', () => {
+    const cap = 5;
+    const solved = generateSolvableTray(fullBoard(), seedState(1), 0, TRAY_SIZE, cap);
+    expect(solved.pieces).toHaveLength(TRAY_SIZE); // returns a fallback tray, does not hang
+    expect(trayHasPlacement(fullBoard(), solved.pieces)).toBe(false); // still unfittable
+    // One initial draw + `cap` re-draws advanced the id sequence by (cap + 1) hands.
+    expect(solved.nextSeq).toBe(TRAY_SIZE * (cap + 1));
   });
 });

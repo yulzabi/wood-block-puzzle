@@ -9,7 +9,7 @@
 import type { Coord, GameEvent, GameState, GameStatus, Move, MoveResult, Piece, RejectReason } from './types';
 import { TRAY_SIZE } from './types';
 import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, idx, inBounds, place } from './board';
-import { attachGems, generatePieces } from './pieces';
+import { attachGems, generatePieces, generateSolvableTray } from './pieces';
 import { generateLevel } from './levels';
 import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 import { seedState } from './rng';
@@ -54,9 +54,12 @@ export function newGame(seed: number, highScore: number): GameState {
 
 /** Internal: begin a fresh endless round (fresh board + a new tray of 3), preserving RNG + high score. */
 function beginPlaying(state: GameState): GameState {
-  const { pieces, rngState, nextSeq } = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+  const board = createBoard();
+  // Solvability guarantee: the opening hand always has a legal move. (An empty
+  // board fits anything, so this returns the first draw unchanged in practice.)
+  const { pieces, rngState, nextSeq } = generateSolvableTray(board, state.rngState, state.pieceSeq, TRAY_SIZE);
   return {
-    board: createBoard(),
+    board,
     tray: pieces,
     score: 0,
     highScore: state.highScore,
@@ -79,7 +82,9 @@ function beginPlaying(state: GameState): GameState {
 /** Internal: begin a fresh Levels round for `level`, preserving RNG + high score. */
 function beginLevel(state: GameState, level: number): GameState {
   const gen = generateLevel(level);
-  const drawn = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+  // Solvability guarantee: the opening hand always has a legal move against the
+  // level's starting board (gems occupy cells, so this checks the real layout).
+  const drawn = generateSolvableTray(gen.board, state.rngState, state.pieceSeq, TRAY_SIZE);
 
   // On gem levels, ride gems onto the first tray, draining the level's supply.
   let tray = drawn.pieces;
