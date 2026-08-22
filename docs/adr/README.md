@@ -9,6 +9,7 @@ Short records of deliberate, load-bearing choices. Each is enforced across the c
 | [0003](0003-uniform-random-piece-selection.md) | Uniform-random piece selection (no weighting / no guaranteed-solvable refill) |
 | [0004](0004-prompt-service-worker-updates.md) | Prompt-based service-worker updates, not silent autoUpdate |
 | [0005](0005-centered-portrait-app-frame.md) | Centered portrait app-frame layout |
-| [0006](0006-resume-in-progress-game.md) | Persist & resume the in-progress game (supersedes 0001's no-resume clause) |
+| [0006](0006-resume-in-progress-game.md) | Persist & resume the in-progress game — single slot (superseded by 0007) |
+| [0007](0007-per-context-resume.md) | Per-context resume: two slots (Endless + shared Levels), contextual entry points, pause keeps the save |
 
 Format: Context → Decision → Consequences. Keep them short.

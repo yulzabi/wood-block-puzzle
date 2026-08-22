@@ -1,6 +1,6 @@
 # 0006 — Resume in-progress game
 
-**Status:** Accepted — supersedes the "in-progress game is NOT persisted" clause of [0001](0001-high-score-only-persistence.md).
+**Status:** Superseded by [0007](0007-per-context-resume.md) — resume moved from a single shared slot to two per-context slots (Endless + Levels). The core decision (persist & resume the in-progress game, reversing [0001](0001-high-score-only-persistence.md)'s no-persistence clause) still holds; only the slot model + entry points changed. Kept for history.
 
 ## Context
 
