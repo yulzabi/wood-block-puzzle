@@ -205,6 +205,19 @@
     inset 0 -3px 4px rgba(0, 0, 0, 0.35),
     0 1px 2px rgba(0, 0, 0, 0.3);
 }
+/* Paint diet for touch devices (the weak-GPU case that lags mid-drag): the rich
+   wood look — a linear-gradient + two color-mix()es + three box-shadows — is what
+   every churned cell repaints with during a drag. On coarse pointers, swap it for
+   a flat fill + one cheap un-blurred inset highlight so a repaint is nearly free;
+   desktop (pointer: fine) keeps the rich look. MUST precede the preview/line-hint
+   rules below — equal specificity (0,2,0), order-dependent, so those still win the
+   ring/tint on a filled cell. */
+@media (pointer: coarse) {
+  .cell.filled {
+    background: var(--block);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
+  }
+}
 
 .cell.preview {
   outline: 2px solid transparent;
@@ -295,15 +308,8 @@
     inset 0 -3px 4px rgba(0, 0, 0, 0.35),
     0 1px 2px rgba(0, 0, 0, 0.3);
 }
-
-/* Paint diet for touch devices (the weak-GPU case that lags mid-drag). The rich
-   wood look — a linear-gradient + two color-mix()es + three box-shadows — is what
-   every churned cell repaints with during a drag (preview/line-hint flips, fills,
-   clears). On coarse pointers, swap it for a flat fill + one cheap un-blurred inset
-   highlight, so a repaint is nearly free. Desktop (pointer: fine) keeps the rich
-   look. Still reads as a solid wood tile. */
+/* Paint diet: flat fill for the tray/ghost blocks on touch (see .cell.filled). */
 @media (pointer: coarse) {
-  .cell.filled,
   .block {
     background: var(--block);
     box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
