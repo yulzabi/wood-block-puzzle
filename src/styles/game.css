@@ -227,16 +227,17 @@
   position: absolute;
   pointer-events: none;
 }
-/* Valid: a checkmark drawn from two borders, scaling with the cell. */
+/* Valid: a checkmark drawn from two borders, scaling with the cell. No `filter`
+   (it would repaint on every previewed cell during a drag); contrast comes from
+   an opaque white stroke over the green-tinted valid cell instead of a shadow. */
 .cell.preview--valid::before {
   left: 50%;
   top: 46%;
   width: 26%;
   height: 46%;
   transform: translate(-50%, -50%) rotate(45deg);
-  border-right: 3px solid rgba(255, 255, 255, 0.95);
-  border-bottom: 3px solid rgba(255, 255, 255, 0.95);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+  border-right: 3px solid #fff;
+  border-bottom: 3px solid #fff;
 }
 /* Invalid: diagonal hatch fill — an unmistakable "blocked" pattern. */
 .cell.preview--invalid::before {
@@ -339,6 +340,10 @@
 }
 
 /* ---- Drag ghost ---- */
+/* The ghost is the one element that moves every frame. It must ONLY recomposite
+   (translate), never re-rasterize — so no `filter`, animated shadow, or size
+   change here. The lifted-shadow look lives on the ghost's blocks (painted once
+   when the ghost is built), below. */
 .drag-ghost {
   position: fixed;
   left: 0;
@@ -346,7 +351,14 @@
   z-index: 50;
   pointer-events: none;
   will-change: transform;
-  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.4));
+}
+/* Lift shadow baked into the ghost's blocks (compositor-friendly: part of the
+   layer texture, painted once, then only recomposited as the ghost moves). */
+.drag-ghost .block {
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -3px 4px rgba(0, 0, 0, 0.35),
+    0 8px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* ---- Score pop-up ---- */
