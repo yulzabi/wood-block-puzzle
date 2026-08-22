@@ -25,6 +25,9 @@ import {
   clearLevelsSave,
   loadDaily,
   saveDaily,
+  loadDailySave,
+  hasDailySave,
+  clearDailySave,
 } from './storage';
 import { DEFAULT_DAILY_STATE, type DailyState } from '../core/daily';
 import type { GameState, Piece } from '../core/types';
@@ -631,6 +634,53 @@ describe('nextLevelToPlay', () => {
       3: { completed: true, bestScore: 3 },
     };
     expect(nextLevelToPlay(results, 3)).toBe(4);
+  });
+});
+
+describe('daily save slot (in-progress daily run)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('routes the daily run to its own slot — Endless is not touched (no cross-contamination)', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    // Save a normal Endless game to the Endless slot.
+    saveGame(richEndlessState());
+    // Now save the SAME-shaped state as the daily (daily=true) — a distinct slot.
+    saveGame(richEndlessState(), true);
+    expect(loadDailySave()).not.toBeNull();
+    expect(loadEndlessSave()).not.toBeNull(); // the Endless save still stands
+  });
+
+  it('a fresh Endless save does not create a daily save (and vice versa)', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richEndlessState()); // endless only
+    expect(hasDailySave()).toBe(false);
+    clearEndlessSave();
+    saveGame(richEndlessState(), true); // daily only
+    expect(hasDailySave()).toBe(true);
+    expect(loadEndlessSave()).toBeNull();
+  });
+
+  it('clearDailySave removes only the daily slot', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richEndlessState()); // endless
+    saveGame(richEndlessState(), true); // daily
+    clearDailySave();
+    expect(hasDailySave()).toBe(false);
+    expect(loadEndlessSave()).not.toBeNull(); // endless survives
+  });
+
+  it('a deferred daily schedule flushes to the daily slot, not Endless', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveGame(richEndlessState(), true);
+    flushSaveGame();
+    expect(hasDailySave()).toBe(true);
+    expect(loadEndlessSave()).toBeNull();
   });
 });
 

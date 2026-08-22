@@ -3,10 +3,22 @@ import {
   DEFAULT_DAILY_STATE,
   canPlayDaily,
   dailySeedFor,
+  formatDay,
   recordDailyResult,
   startDaily,
   type DailyState,
 } from './daily';
+
+describe('formatDay', () => {
+  it('formats a Date as a zero-padded local YYYY-MM-DD', () => {
+    expect(formatDay(new Date(2026, 0, 5))).toBe('2026-01-05'); // Jan is month 0, single-digit day
+    expect(formatDay(new Date(2026, 11, 31))).toBe('2026-12-31');
+  });
+
+  it('round-trips through dailySeedFor', () => {
+    expect(dailySeedFor(formatDay(new Date(2026, 7, 22)))).toBe(20260822);
+  });
+});
 
 describe('dailySeedFor', () => {
   it('maps a date to its YYYYMMDD integer (fixed date → fixed seed)', () => {

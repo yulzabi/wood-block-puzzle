@@ -24,6 +24,13 @@ import { canPlace, firstPlacement, linesCompletedBy } from './core/board';
 import { generateLevel } from './core/levels';
 import { streakMultiplier } from './core/scoring';
 import {
+  canPlayDaily,
+  dailySeedFor,
+  formatDay,
+  recordDailyResult,
+  startDaily,
+} from './core/daily';
+import {
   loadHighScore,
   saveHighScore,
   loadLevelProgress,
@@ -39,6 +46,11 @@ import {
   hasEndlessSave,
   clearEndlessSave,
   clearLevelsSave,
+  loadDaily,
+  saveDaily,
+  loadDailySave,
+  hasDailySave,
+  clearDailySave,
   loadSettings,
   saveSettings,
   loadStats,
@@ -62,6 +74,7 @@ import {
   renderLevelFailed,
   renderLevelMap,
   renderLevelCard,
+  renderDailyOver,
   renderSettings,
   renderStats,
   type InstallAffordance,
@@ -93,6 +106,8 @@ export class App {
   private settings: Settings;
   private stats: Stats;
   private state: GameState;
+  /** True while the current game is today's Daily run (routes its save to the daily slot). */
+  private isDaily = false;
 
   constructor(root: HTMLElement) {
     this.screens = createScreens(root);
@@ -213,12 +228,35 @@ export class App {
     }
   }
 
+  /** Today's local calendar day (`YYYY-MM-DD`) — the app's single daily clock read. */
+  private today(): string {
+    return formatDay(new Date());
+  }
+
+  /** Schedule the coalesced idle save for the current game, routed to the right slot. */
+  private scheduleSave(): void {
+    scheduleSaveGame(this.state, this.isDaily);
+  }
+
   /** Render the home menu and (re)attach the install affordance below it. */
   private renderHomeScreen(): void {
+    const today = this.today();
+    const daily = loadDaily();
+    const resumable = hasDailySave(); // an in-progress daily run (same attempt) can resume
     renderHome(this.screens.home, {
       onLevels: () => this.showLevelMap(),
       onEndless: () => this.enterEndless(),
       currentLevel: loadLevelProgress(),
+      daily: {
+        // Playable if there's a run to resume, or today's single attempt is unused.
+        playable: resumable || canPlayDaily(daily, today),
+        resumable,
+        currentStreak: daily.currentStreak,
+        longestStreak: daily.longestStreak,
+        // Show today's score only once today's attempt is done (completed today).
+        todayScore: daily.lastCompletedDate === today && daily.lastResult ? daily.lastResult.score : null,
+        onPlay: () => this.enterDaily(),
+      },
       onSettings: () => this.showSettings(),
       onStats: () => this.showStats(),
       onHowTo: () => this.showIntro(),
@@ -254,11 +292,37 @@ export class App {
       },
       onCancel: () => {
         const saved = loadEndlessSave();
-        if (saved) this.continueGame(saved);
-        else this.playEndless();
+        if (saved) {
+          this.isDaily = false; // a normal Endless resume, not the daily
+          this.continueGame(saved);
+        } else this.playEndless();
       },
     });
     this.screens.show('overlay');
+  }
+
+  /**
+   * Home → Daily. If an in-progress daily run exists, resume the SAME attempt
+   * (no re-seed, no second startDaily). Otherwise consume today's single attempt
+   * — startDaily marks it used at START, so quitting mid-run can't dodge it —
+   * then begin an Endless run seeded deterministically from today's date.
+   */
+  private enterDaily(): void {
+    const today = this.today();
+    const saved = loadDailySave();
+    if (saved) {
+      this.isDaily = true;
+      this.continueGame(saved); // restore verbatim — same seed/state, same attempt
+      return;
+    }
+    const daily = loadDaily();
+    // Defensive: the home entry is only playable when this is true or a save exists.
+    if (!canPlayDaily(daily, today)) return;
+    saveDaily(startDaily(daily, today)); // quit = used: mark used BEFORE the run starts
+    this.isDaily = true;
+    this.state = startGame(newGame(dailySeedFor(today), loadHighScore())).state;
+    this.bumpGames();
+    this.enterGame();
   }
 
   // ---- Level Map ----
@@ -321,6 +385,7 @@ export class App {
       objective: this.levelObjective(level),
       resumable,
       onPlay: () => {
+        this.isDaily = false; // Levels resume, never the daily
         if (resumable && saved) this.continueGame(saved);
         else startFresh();
       },
@@ -417,6 +482,7 @@ export class App {
 
   /** Start an Endless game. */
   private playEndless(): void {
+    this.isDaily = false;
     this.state = startGame(newGame(Date.now(), loadHighScore())).state;
     this.bumpGames();
     this.enterGame();
@@ -424,6 +490,7 @@ export class App {
 
   /** Start a Levels game at `level`. */
   private playLevels(level: number): void {
+    this.isDaily = false;
     this.state = newLevelsGame(level, Date.now(), loadHighScore());
     this.bumpGames();
     this.enterGame();
@@ -439,7 +506,8 @@ export class App {
     // This in-progress game becomes the resumable save (overwriting any stale one),
     // so starting/continuing a game is always what Continue would resume. Deferred
     // to idle; a flush on hide covers "started then immediately backgrounded".
-    scheduleSaveGame(this.state);
+    // Routed to the daily slot when this is the daily run (this.isDaily).
+    this.scheduleSave();
     if (this.state.mode === 'levels') {
       this.announce(this.objectiveMessage());
     } else {
@@ -618,7 +686,8 @@ export class App {
     switch (this.state.status) {
       case 'gameover':
         this.announce(`Game over. Final score ${this.state.score}.`);
-        this.endGame();
+        if (this.isDaily) this.endDaily();
+        else this.endGame();
         return;
       case 'levelcomplete':
         this.announce(`Level ${this.state.level} complete! Score ${this.state.score}.`);
@@ -631,7 +700,7 @@ export class App {
       default:
         // Still playing — snapshot (deferred to idle, coalesced) so a reload or
         // backgrounding resumes this move without a write inside the drop frame.
-        scheduleSaveGame(this.state);
+        this.scheduleSave();
         this.setInteractive(true);
     }
   }
@@ -702,9 +771,36 @@ export class App {
   }
 
   private restartGame(): void {
+    this.isDaily = false;
     this.state = restart(this.state).state;
     this.bumpGames();
     this.enterGame();
+  }
+
+  // ---- Daily challenge game over ----
+  /**
+   * Daily run finished (game-over): clear its run save (a finished daily can't
+   * resume), record the completed result — streak credit lands on completion —
+   * and show the distinct daily result (no "Play again": the single attempt is
+   * spent). The score still counts toward the global high score.
+   */
+  private endDaily(): void {
+    const today = this.today();
+    clearDailySave();
+    const daily = recordDailyResult(loadDaily(), today, this.state.score);
+    saveDaily(daily);
+    const isNewHigh = this.state.score > loadHighScore();
+    saveHighScore(this.state.highScore);
+    this.isDaily = false;
+    renderDailyOver(this.screens.gameover, {
+      finalScore: this.state.score,
+      currentStreak: daily.currentStreak,
+      longestStreak: daily.longestStreak,
+      isNewHigh,
+      highScore: this.state.highScore,
+      onHome: () => this.goHome(),
+    });
+    this.screens.show('gameover');
   }
 
   // ---- Levels ----
@@ -723,6 +819,7 @@ export class App {
   }
 
   private goNextLevel(): void {
+    this.isDaily = false;
     this.state = nextLevel(this.state).state;
     this.enterGame();
   }
@@ -738,6 +835,7 @@ export class App {
   }
 
   private retryCurrentLevel(): void {
+    this.isDaily = false;
     this.state = retryLevel(this.state).state;
     this.bumpGames();
     this.enterGame();
@@ -775,8 +873,11 @@ export class App {
   }
 
   private goHome(): void {
+    // Leaving to the menu ends the daily *context* (a paused daily stays in its
+    // save slot and is resumed via the Daily entry, not this fresh home state).
+    this.isDaily = false;
     this.state = newGame(Date.now(), loadHighScore());
-    this.renderHomeScreen(); // refresh the "resume at level N" hint
+    this.renderHomeScreen(); // refresh the resume hint + daily entry
     this.screens.show('home');
   }
 }

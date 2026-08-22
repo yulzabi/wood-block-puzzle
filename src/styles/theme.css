@@ -185,6 +185,45 @@ body {
   color: var(--text-dim);
 }
 
+/* ---- Daily Challenge home entry ---- */
+.daily-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 300px;
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.15));
+  border-radius: 12px;
+}
+.daily-card .btn {
+  width: 100%;
+}
+.daily-card-title {
+  margin: 0;
+  font-weight: 600;
+}
+.daily-card-stats {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.daily-done {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.daily-over-streak {
+  font-weight: 600;
+}
+.daily-over-note {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 /* Small secondary actions under the home menu (settings / stats / how-to). */
 .home-actions {
   display: flex;

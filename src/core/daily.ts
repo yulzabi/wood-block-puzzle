@@ -58,6 +58,19 @@ function dayIndex(date: string): number {
 }
 
 /**
+ * Format a `Date` as a local-calendar `YYYY-MM-DD` string — the app's single
+ * clock-read boundary for the daily (so the daily rolls over at the player's
+ * local midnight). Everything downstream takes this string, keeping the logic
+ * deterministic and testable.
+ */
+export function formatDay(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
  * Deterministic seed for the daily run on `date` (a `YYYY-MM-DD` string): the
  * numeric `YYYYMMDD`. Same date → same seed → same piece sequence for everyone;
  * different dates differ. Feed it to `newGame(seed, …)` (which mixes it via

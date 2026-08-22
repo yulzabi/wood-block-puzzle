@@ -194,6 +194,57 @@ export function renderGameOver(gameover: HTMLElement, opts: GameOverOpts): void 
   panel.classList.add('enter');
 }
 
+/** Options for the daily-challenge result overlay (single attempt — no replay). */
+export interface DailyOverOpts {
+  readonly finalScore: number;
+  readonly currentStreak: number;
+  readonly longestStreak: number;
+  readonly isNewHigh: boolean;
+  readonly highScore: number;
+  onHome(): void;
+}
+
+/**
+ * Populate the daily result overlay. Distinct from the Endless game-over: it
+ * shows the day's score + updated streak and offers only Home (the single daily
+ * attempt is spent — "come back tomorrow"), never "Play again".
+ */
+export function renderDailyOver(gameover: HTMLElement, opts: DailyOverOpts): void {
+  gameover.textContent = '';
+  gameover.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel daily-over-panel');
+
+  const label = el('p', 'gameover-score-label');
+  label.textContent = 'DAILY';
+
+  const scoreLine = el('p', 'gameover-score');
+  scoreLine.textContent = String(opts.finalScore);
+
+  const title = el('h2', 'title gameover-title');
+  title.textContent = 'Daily done';
+
+  const streak = el('p', 'gameover-best daily-over-streak');
+  streak.textContent = `Streak ${opts.currentStreak} 🔥 · Best ${opts.longestStreak}`;
+
+  const best = el('p', 'gameover-best');
+  best.textContent = opts.isNewHigh ? '🏆 New best!' : `Best ${opts.highScore}`;
+  if (opts.isNewHigh) best.classList.add('is-new');
+
+  const note = el('p', 'daily-over-note');
+  note.textContent = 'Come back tomorrow for a new challenge';
+
+  const home = document.createElement('button');
+  home.className = 'btn btn--primary';
+  home.type = 'button';
+  home.textContent = 'Home';
+  home.addEventListener('click', opts.onHome);
+
+  panel.append(label, scoreLine, title, streak, best, note, home);
+  gameover.append(panel);
+  replayEnter(panel);
+}
+
 /** Options for a generic confirm dialog (e.g. quit-to-menu). */
 export interface ConfirmOpts {
   readonly title: string;
@@ -249,12 +300,28 @@ export function renderConfirm(overlay: HTMLElement, opts: ConfirmOpts): void {
   cancel.focus(); // default to the safe action
 }
 
+/** Daily-challenge state for the home entry (decided by the app from daily storage). */
+export interface HomeDailyOpts {
+  /** Interactable now — a fresh daily is available OR an in-progress one can resume. */
+  readonly playable: boolean;
+  /** A resumable in-progress daily exists → the action reads "Resume" (same attempt). */
+  readonly resumable: boolean;
+  readonly currentStreak: number;
+  readonly longestStreak: number;
+  /** Today's completed score, if the daily was finished today; else null. */
+  readonly todayScore: number | null;
+  /** Start (or resume) today's daily. Only wired when `playable`. */
+  onPlay(): void;
+}
+
 /** Options for the home-screen mode menu. */
 export interface HomeOpts {
   onLevels(): void;
   onEndless(): void;
   /** The level the player will resume at (shown as a hint). */
   currentLevel: number;
+  /** Daily-challenge entry state. */
+  daily: HomeDailyOpts;
   onSettings(): void;
   onStats(): void;
   onHowTo(): void;
@@ -293,6 +360,8 @@ export function renderHome(home: HTMLElement, opts: HomeOpts): void {
   const hint = el('p', 'home-hint');
   hint.textContent = `Levels resume at level ${opts.currentLevel}`;
 
+  const daily = dailyCard(opts.daily);
+
   const actions = el('div', 'home-actions');
   actions.append(
     ghostButton('⚙ Settings', opts.onSettings),
@@ -300,7 +369,48 @@ export function renderHome(home: HTMLElement, opts: HomeOpts): void {
     ghostButton('How to play', opts.onHowTo),
   );
 
-  home.append(title, subtitle, menu, hint, actions);
+  home.append(title, subtitle, menu, hint, daily, actions);
+}
+
+/**
+ * The home Daily-Challenge entry + a compact streak summary. Playable → a real
+ * "Play"/"Resume" button (`.daily-play`); already done today → a non-interactive
+ * "Come back tomorrow" note (`.daily-done`) with today's score. The two states
+ * are distinct elements (element-level, not a flag) so tests can assert them.
+ */
+function dailyCard(d: HomeDailyOpts): HTMLElement {
+  const card = el('div', 'daily-card');
+
+  const heading = el('p', 'daily-card-title');
+  heading.textContent = '🗓 Daily Challenge';
+
+  const stats = el('p', 'daily-card-stats');
+  const streakBit =
+    d.currentStreak > 0
+      ? `Streak ${d.currentStreak} 🔥 · Best ${d.longestStreak}`
+      : 'Play daily to start a streak';
+  stats.textContent = d.todayScore !== null ? `Today ${d.todayScore} · ${streakBit}` : streakBit;
+
+  card.append(heading, stats);
+
+  if (d.playable) {
+    const play = document.createElement('button');
+    play.className = 'btn btn--primary daily-play';
+    play.type = 'button';
+    play.textContent = d.resumable ? 'Resume Daily' : 'Play Daily';
+    play.setAttribute(
+      'aria-label',
+      `${d.resumable ? 'Resume' : "Play today's"} daily challenge. Current streak ${d.currentStreak} days.`,
+    );
+    play.addEventListener('click', d.onPlay);
+    card.append(play);
+  } else {
+    const done = el('p', 'daily-done');
+    done.textContent = 'Done ✓ — come back tomorrow';
+    card.append(done);
+  }
+
+  return card;
 }
 
 /** A small ghost button used in the home action row / overlays. */

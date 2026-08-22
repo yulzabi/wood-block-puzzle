@@ -8,6 +8,7 @@ import {
   renderLevelMap,
   renderLevelCard,
   renderHome,
+  renderDailyOver,
 } from './screens';
 
 function buttonByText(root: HTMLElement, text: string): HTMLButtonElement {
@@ -171,17 +172,77 @@ describe('screens (DOM)', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it('renderHome has no Continue button — resume is contextual (Endless prompt / map node)', () => {
-    const s = createScreens(root);
+  const homeDaily = (over: Partial<import('./screens').HomeDailyOpts> = {}): import('./screens').HomeDailyOpts => ({
+    playable: true,
+    resumable: false,
+    currentStreak: 0,
+    longestStreak: 0,
+    todayScore: null,
+    onPlay: vi.fn(),
+    ...over,
+  });
+
+  const renderHomeWith = (
+    s: ReturnType<typeof createScreens>,
+    daily: import('./screens').HomeDailyOpts,
+  ): void =>
     renderHome(s.home, {
       onLevels: vi.fn(),
       onEndless: vi.fn(),
       currentLevel: 1,
+      daily,
       onSettings: vi.fn(),
       onStats: vi.fn(),
       onHowTo: vi.fn(),
     });
+
+  it('renderHome has no Continue button — resume is contextual (Endless prompt / map node)', () => {
+    const s = createScreens(root);
+    renderHomeWith(s, homeDaily());
     expect(Array.from(s.home.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
+  });
+
+  it('renderHome daily entry: playable → a Play button; already-done → no Play button, a done note', () => {
+    const s = createScreens(root);
+
+    // Playable (fresh): a real .daily-play button, labeled "Play Daily".
+    const onPlay = vi.fn();
+    renderHomeWith(s, homeDaily({ playable: true, currentStreak: 4, onPlay }));
+    const play = s.home.querySelector<HTMLButtonElement>('.daily-play');
+    expect(play).not.toBeNull();
+    expect(play!.textContent).toBe('Play Daily');
+    expect(s.home.querySelector('.daily-done')).toBeNull();
+    play!.click();
+    expect(onPlay).toHaveBeenCalledOnce();
+
+    // Resumable in-progress daily: the same button reads "Resume Daily".
+    renderHomeWith(s, homeDaily({ playable: true, resumable: true }));
+    expect(s.home.querySelector<HTMLButtonElement>('.daily-play')!.textContent).toBe('Resume Daily');
+
+    // Already played today (single attempt spent): NO play button, a done note.
+    renderHomeWith(s, homeDaily({ playable: false, currentStreak: 4, todayScore: 820 }));
+    expect(s.home.querySelector('.daily-play')).toBeNull();
+    expect(s.home.querySelector('.daily-done')).not.toBeNull();
+    expect(s.home.querySelector('.daily-card-stats')!.textContent).toContain('820'); // today's score shown
+  });
+
+  it('renderDailyOver shows the streak and only a Home action (no replay)', () => {
+    const s = createScreens(root);
+    const onHome = vi.fn();
+    renderDailyOver(s.gameover, {
+      finalScore: 640,
+      currentStreak: 3,
+      longestStreak: 7,
+      isNewHigh: false,
+      highScore: 900,
+      onHome,
+    });
+    // No "Play again" — the single daily attempt is spent.
+    const labels = Array.from(s.gameover.querySelectorAll('button')).map((b) => b.textContent);
+    expect(labels).not.toContain('Play again');
+    expect(s.gameover.querySelector('.daily-over-streak')!.textContent).toContain('3'); // current streak
+    buttonByText(s.gameover, 'Home').click();
+    expect(onHome).toHaveBeenCalledOnce();
   });
 
   it('renderLevelCard shows Play/Replay (no Continue / Start over) for a non-resumable level', () => {

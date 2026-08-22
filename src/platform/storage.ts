@@ -350,9 +350,12 @@ function isValidPiece(x: unknown): boolean {
   return true;
 }
 
-/** Per-mode save slots — an Endless game and a Levels game resume independently. */
+/** Per-context save slots — Endless, Levels, and the Daily each resume independently.
+ *  The Daily runs as an Endless game (mode==='endless') but MUST use its own slot
+ *  so playing the daily never clobbers a normal Endless save (and vice versa). */
 const SAVE_ENDLESS_KEY = 'wbp.v1.save.endless';
 const SAVE_LEVELS_KEY = 'wbp.v1.save.levels';
+const SAVE_DAILY_KEY = 'wbp.v1.save.daily';
 
 function slotKey(mode: GameMode): string {
   return mode === 'endless' ? SAVE_ENDLESS_KEY : SAVE_LEVELS_KEY;
@@ -457,8 +460,10 @@ function resumable(state: GameState | null): GameState | null {
  * survive independently. Uint8Array channels round-trip as plain arrays. Also
  * cleans up the pre-keyed single slot. Silent no-op on failure.
  */
-export function saveGame(state: GameState): void {
-  writeSave(slotKey(state.mode), state);
+export function saveGame(state: GameState, daily = false): void {
+  // The Daily is an Endless run but is keyed to its own slot so it can't
+  // cross-contaminate a normal Endless save.
+  writeSave(daily ? SAVE_DAILY_KEY : slotKey(state.mode), state);
   removeKey(SAVE_KEY); // migrate away from the legacy single slot
 }
 
@@ -472,6 +477,11 @@ export function loadLevelsSave(): GameState | null {
   return resumable(readSave(SAVE_LEVELS_KEY));
 }
 
+/** The resumable in-progress Daily run, or null (its own slot, distinct from Endless). */
+export function loadDailySave(): GameState | null {
+  return resumable(readSave(SAVE_DAILY_KEY));
+}
+
 /** Whether a resumable Endless game exists. */
 export function hasEndlessSave(): boolean {
   return loadEndlessSave() !== null;
@@ -480,6 +490,11 @@ export function hasEndlessSave(): boolean {
 /** Whether a resumable Levels game exists. */
 export function hasLevelsSave(): boolean {
   return loadLevelsSave() !== null;
+}
+
+/** Whether a resumable in-progress Daily run exists (same attempt, resumable-not-restartable). */
+export function hasDailySave(): boolean {
+  return loadDailySave() !== null;
 }
 
 /** Remove the Endless save. Silent no-op on failure. */
@@ -494,6 +509,12 @@ export function clearLevelsSave(): void {
   removeKey(SAVE_LEVELS_KEY);
 }
 
+/** Remove the Daily run save (call on daily completion/abandon). Silent no-op on failure. */
+export function clearDailySave(): void {
+  cancelPendingSave();
+  removeKey(SAVE_DAILY_KEY);
+}
+
 // --- Deferred (idle-time) per-move save ---
 // Serializing GameState to localStorage is synchronous disk I/O; doing it inside
 // the placement frame costs a few ms on old hardware. Defer the per-move write to
@@ -501,6 +522,7 @@ export function clearLevelsSave(): void {
 // (nothing lost on close); terminal clears cancel any pending write.
 
 let pendingSave: GameState | null = null;
+let pendingDaily = false;
 let saveHandle: number | null = null;
 
 function cancelPendingSave(): void {
@@ -510,23 +532,28 @@ function cancelPendingSave(): void {
     saveHandle = null;
   }
   pendingSave = null;
+  pendingDaily = false;
 }
 
 /**
  * Schedule a coalesced, off-the-hot-path save of `state` at idle time (falling
  * back to a 0ms timeout where requestIdleCallback is unavailable — e.g. older
- * iOS). Rapid calls collapse to one write of the latest state. Flush on
- * backgrounding (flushSaveGame) guarantees a reload right after a move still
- * restores.
+ * iOS). Rapid calls collapse to one write of the latest state. `daily` routes
+ * the write to the Daily slot (the run is mode 'endless' but must not touch the
+ * Endless slot). Flush on backgrounding (flushSaveGame) guarantees a reload
+ * right after a move still restores.
  */
-export function scheduleSaveGame(state: GameState): void {
+export function scheduleSaveGame(state: GameState, daily = false): void {
   pendingSave = state;
+  pendingDaily = daily;
   if (saveHandle !== null) return; // already scheduled — coalesce
   const run = (): void => {
     saveHandle = null;
     const s = pendingSave;
+    const d = pendingDaily;
     pendingSave = null;
-    if (s) saveGame(s);
+    pendingDaily = false;
+    if (s) saveGame(s, d);
   };
   saveHandle =
     typeof requestIdleCallback === 'function'
@@ -538,8 +565,9 @@ export function scheduleSaveGame(state: GameState): void {
 export function flushSaveGame(): void {
   if (pendingSave === null) return;
   const s = pendingSave;
+  const d = pendingDaily;
   cancelPendingSave();
-  saveGame(s);
+  saveGame(s, d);
 }
 
 // --- Daily Challenge state ---

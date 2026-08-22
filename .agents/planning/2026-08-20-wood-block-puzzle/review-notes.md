@@ -98,6 +98,38 @@ app.ts). Locked nodes = native `disabled` (not clickable/focusable). Replay rege
   visuals before then — mechanics first.
 
 ## P2 — Hints (OFF by default)
+
+**P8 — Fairness & trust (engagement plan; core-only, test-first):**
+- [x] **P8a (ed425cc) — solvability guarantee.** `trayHasPlacement` + `generateSolvableTray`
+  (re-draws the opening hand until a piece fits, capped=20, deterministic re-draws, fallback on
+  no-fit board). Wired into beginPlaying + beginLevel; refill uses plain generatePieces (correct).
+  Termination proven (`nextSeq === TRAY_SIZE·(cap+1)`); determinism + no-op-on-fittable tested.
+  243 green, no seeds shifted.
+- [x] **P8b (f1e5949) — anti-frustration tray bias, Levels-retry ONLY.** `generateBiasedTray`
+  leans ~2 of 3 slots (70% each) toward board-fitting shapes on retry. **Bounded/ethical: proven
+  it does NOT guarantee an all-fitting tray** (test asserts both `anyNonFitting` AND
+  `!everyTrayAllFitting` — skilled play can still lose). Endless restart = uniform (high-score
+  integrity, tested); only `retryLevel` biases; falls back to uniform on a no-fit board (never
+  hangs); deterministic. **P8 (fairness) COMPLETE.** 243+ green, core-only.
+
+**P9 — Daily Challenge + streak calendar (engagement plan):**
+- [x] **P9a (fca56b0) — daily core + persistence.** `dailySeedFor(date)` deterministic;
+  `wbp.v1.daily` never-throw/backward-compat. **Two-field design (TPM-confirmed correct):**
+  `lastPlayedDate` set at `startDaily` gates `canPlayDaily` (quit=used, dodge-impossible);
+  `lastCompletedDate` in `recordDailyResult` drives streak (credit on COMPLETION — a deliberate
+  mid-run quit forfeits streak + attempt; normal play always ends in game-over → always credited).
+  Streak: consecutive build / one-gap forgiven / second-gap reset / longest retained — all tested.
+  Core-only, 275 green.
+- [x] **P9b (02643d5) — daily UI + resume wiring. P9 COMPLETE.** Home Daily entry
+  (Play/Resume/Done states); `enterDaily` marks used-at-start (`saveDaily(startDaily())` before run
+  → quit can't dodge, test-proven); dedicated `wbp.v1.save.daily` slot via `scheduleSaveGame(state,
+  daily)` — isolation from Endless slot proven both directions; resume = `continueGame(loadDailySave())`
+  verbatim (no re-seed/re-startDaily); distinct daily game-over (streak, Home only). 287 green.
+  - Deferred (flagged for designer): literal day-grid streak calendar needs per-day history in
+    DailyState — current impl shows compact current/longest/today's-best summary.
+  - **Owner device gate:** Play Daily→run seeded by today; ←Menu→Home shows Resume Daily; game-over
+    →daily-done w/ streak, Home only; **confirm normal Endless "Continue" still works after playing
+    the daily** (cross-contamination check).
 **Status: DONE (P2a 5ab1892 `firstPlacement` core + `hasAnyPlacement` refactor to delegate;
 P2b aae0309 settings + in-game Hint button). Defaults OFF; per-field settings load is
 backward-compatible with legacy blobs; button absent from DOM when off; single-highlight
@@ -221,6 +253,15 @@ half-restore. 220 green. Storage-only.**
      move write (debounced, transition-only); render-assert tests. **PERF TRACK & P7 CODE-COMPLETE.**
      Owner device gates pending: (a) no line-clear jank + resume-after-immediate-reload; (b) badge/
      shield eyeball — makes "why didn't my streak reset?" obvious.
+- [ ] **Tier 2 (clear-frame polish) — MEASURED, tracked, non-blocking (ongoing perf effort w/ PE).**
+  Owner device reading (2026-08-22): line-clears **dip to ~32fps for a moment then recover to 60** —
+  a transient one-frame burst (render + audio + haptics + particles + pops all in one frame), NOT
+  sustained lag. Real but minor polish. Fix order when picked up, **re-measure after each, stop when
+  clears hold ~60** (don't over-build): (1) **stagger decorations** to next rAF — targets the burst
+  directly, likely biggest win; (2) diff `renderBoard` + no-op-render unit guard; (3) single tray
+  render per move (drop redundant refill-branch `renderTray`); (4) audio pre-warm only if a
+  first-placement hitch is separately seen. Serial on the spine (app.ts/hud.ts). Deferred as
+  ongoing perf, not blocking functional-complete.
 - [x] **Streak badge overlap fix (7656250) — structural.** Badge was `position:absolute;right:0`
   on `.hud`, landing on top of the BEST box on small layouts. Fixed by moving it to a dedicated
   `.hud-streak-line` flow slot (24px reserved, no jump) above the score row; `.hud` is now a flex
