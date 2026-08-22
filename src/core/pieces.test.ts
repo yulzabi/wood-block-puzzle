@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { attachGems, generatePieces, generateSolvableTray, trayHasPlacement } from './pieces';
+import {
+  attachGems,
+  generateBiasedTray,
+  generatePieces,
+  generateSolvableTray,
+  trayHasPlacement,
+} from './pieces';
 import { seedState } from './rng';
 import { BOARD_SIZE, MATERIAL_COUNT, TRAY_SIZE } from './types';
 import { createBoard, idx } from './board';
@@ -192,5 +198,58 @@ describe('generateSolvableTray', () => {
     expect(trayHasPlacement(fullBoard(), solved.pieces)).toBe(false); // still unfittable
     // One initial draw + `cap` re-draws advanced the id sequence by (cap + 1) hands.
     expect(solved.nextSeq).toBe(TRAY_SIZE * (cap + 1));
+  });
+});
+
+// --- P8b: post-loss anti-frustration tray bias (rescues, never guarantees) ---
+
+describe('generateBiasedTray', () => {
+  // A fixed batch of seeds; the properties are statistical over the batch but
+  // fully deterministic (no Math.random).
+  const SEEDS = Array.from({ length: 60 }, (_, i) => seedState(i + 1));
+  const isSingle = (p: Piece): boolean => p.shape.id === 'single';
+
+  it('favors fitting shapes over a uniform draw (the bias is real)', () => {
+    const board = onlySinglesFit(); // only the 1x1 `single` fits anywhere
+    let biasedFit = 0;
+    let uniformFit = 0;
+    for (const s of SEEDS) {
+      biasedFit += generateBiasedTray(board, s, 0, TRAY_SIZE).pieces.filter(isSingle).length;
+      uniformFit += generatePieces(s, 0, TRAY_SIZE).pieces.filter(isSingle).length;
+    }
+    expect(biasedFit).toBeGreaterThan(uniformFit); // clearly more fitting pieces on retry
+  });
+
+  it('is bounded — it does NOT guarantee an all-fitting tray (skilled play can still lose)', () => {
+    const board = onlySinglesFit();
+    // At least one biased tray still contains a non-fitting piece...
+    const anyNonFitting = SEEDS.some((s) =>
+      generateBiasedTray(board, s, 0, TRAY_SIZE).pieces.some((p) => !isSingle(p)),
+    );
+    expect(anyNonFitting).toBe(true);
+    // ...and it never fully rescues EVERY deal (would cross into "can't lose").
+    const everyTrayAllFitting = SEEDS.every((s) =>
+      generateBiasedTray(board, s, 0, TRAY_SIZE).pieces.every(isSingle),
+    );
+    expect(everyTrayAllFitting).toBe(false);
+  });
+
+  it('falls back to a plain uniform draw when no shape fits (never hangs)', () => {
+    const board = fullBoard(); // fitting subset is empty
+    const biased = generateBiasedTray(board, seedState(5), 0, TRAY_SIZE);
+    const uniform = generatePieces(seedState(5), 0, TRAY_SIZE);
+    expect(biased.pieces).toHaveLength(TRAY_SIZE);
+    // With nothing to bias toward, the deal is inert — identical to the uniform stream.
+    expect(biased.pieces.map((p) => p.shape.id)).toEqual(uniform.pieces.map((p) => p.shape.id));
+    expect(biased.rngState).toBe(uniform.rngState);
+  });
+
+  it('is deterministic — same board + seed yields the same tray', () => {
+    const board = onlySinglesFit();
+    const a = generateBiasedTray(board, seedState(3), 0, TRAY_SIZE);
+    const b = generateBiasedTray(board, seedState(3), 0, TRAY_SIZE);
+    expect(a.pieces.map((p) => p.shape.id)).toEqual(b.pieces.map((p) => p.shape.id));
+    expect(a.rngState).toBe(b.rngState);
+    expect(a.nextSeq).toBe(b.nextSeq);
   });
 });

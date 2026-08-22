@@ -60,6 +60,63 @@ export function trayHasPlacement(board: Board, tray: readonly Piece[]): boolean 
 }
 
 /**
+ * P8b anti-frustration bias: how many of the tray's pieces lean toward shapes
+ * that fit the board, and how strongly. Capped deliberately — only the first two
+ * slots are biased (the last stays uniform) and even a biased slot only leans
+ * `BIAS_PERCENT` of the time — so a biased deal is a rescue, NOT a guaranteed
+ * all-fitting tray. Skilled players can still dead-end.
+ */
+const BIAS_SLOTS = 2;
+const BIAS_PERCENT = 70;
+
+/**
+ * Draw a tray that gently leans toward shapes with a legal placement on `board`
+ * — the post-loss rescue used on a Levels retry. Only the first `biasSlots`
+ * pieces are biased, and each leans only `biasPercent`% of the time; the rest
+ * are uniform. If no shape fits at all, the bias is inert and every slot draws
+ * uniformly (so it degrades to a plain deal — never loops). Pure + deterministic
+ * (threads the seeded RNG). The caps guarantee it never forces an all-fitting
+ * hand, which would remove the challenge.
+ */
+export function generateBiasedTray(
+  board: Board,
+  rngState: number,
+  startSeq: number,
+  count: number,
+  biasSlots = BIAS_SLOTS,
+  biasPercent = BIAS_PERCENT,
+): { pieces: Piece[]; rngState: number; nextSeq: number } {
+  // The board doesn't change mid-deal (pieces aren't placed yet), so the fitting
+  // subset is computed once and reused for every slot.
+  const fitting = SHAPES.filter((s) => hasAnyPlacement(board, s));
+  const pieces: Piece[] = [];
+  let state = rngState;
+  let seq = startSeq;
+
+  for (let i = 0; i < count; i++) {
+    let pool: readonly typeof SHAPES[number][] = SHAPES;
+    if (i < biasSlots && fitting.length > 0) {
+      const roll = nextInt(state, 100);
+      state = roll.state;
+      if (roll.value < biasPercent) pool = fitting; // lean toward a fitting shape
+    }
+
+    const shapePick = nextInt(state, pool.length);
+    state = shapePick.state;
+    const shape = pool[shapePick.value]!;
+
+    const materialPick = nextInt(state, MATERIAL_COUNT);
+    state = materialPick.state;
+    const material = materialPick.value + 1; // 1..MATERIAL_COUNT
+
+    pieces.push({ id: `p-${seq}`, shape, material, placed: false });
+    seq++;
+  }
+
+  return { pieces, rngState: state, nextSeq: seq };
+}
+
+/**
  * Draw an OPENING tray that is guaranteed to have a legal move against `board`
  * (the solvability guarantee): if the drawn hand fits nowhere, re-draw —
  * advancing the seeded RNG and the id sequence each time — until one fits or the
@@ -69,6 +126,10 @@ export function trayHasPlacement(board: Board, tray: readonly Piece[]): boolean 
  * nothing can fit, it returns the last draw after `retryLimit` re-draws rather
  * than looping forever. Endless/score levels open on roomy boards, so this
  * almost always returns the first draw unchanged.
+ *
+ * When `bias` is set (Levels retry), each draw leans toward fitting shapes via
+ * `generateBiasedTray`; solvability still only guarantees ONE fitting piece, so
+ * the composition stays a rescue, not a guaranteed all-fitting hand.
  */
 export function generateSolvableTray(
   board: Board,
@@ -76,11 +137,15 @@ export function generateSolvableTray(
   startSeq: number,
   count: number,
   retryLimit = 20,
+  bias = false,
 ): { pieces: Piece[]; rngState: number; nextSeq: number } {
-  let draw = generatePieces(rngState, startSeq, count);
+  const drawOnce = (rng: number, seq: number): { pieces: Piece[]; rngState: number; nextSeq: number } =>
+    bias ? generateBiasedTray(board, rng, seq, count) : generatePieces(rng, seq, count);
+
+  let draw = drawOnce(rngState, startSeq);
   let attempts = 0;
   while (!trayHasPlacement(board, draw.pieces) && attempts < retryLimit) {
-    draw = generatePieces(draw.rngState, draw.nextSeq, count);
+    draw = drawOnce(draw.rngState, draw.nextSeq);
     attempts++;
   }
   return draw;

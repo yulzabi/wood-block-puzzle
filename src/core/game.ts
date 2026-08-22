@@ -79,12 +79,16 @@ function beginPlaying(state: GameState): GameState {
   };
 }
 
-/** Internal: begin a fresh Levels round for `level`, preserving RNG + high score. */
-function beginLevel(state: GameState, level: number): GameState {
+/**
+ * Internal: begin a fresh Levels round for `level`, preserving RNG + high score.
+ * `biasToBoard` (set only on a retry) gently leans the opening hand toward
+ * shapes that fit — a post-loss rescue, capped so it never guarantees a win.
+ */
+function beginLevel(state: GameState, level: number, biasToBoard = false): GameState {
   const gen = generateLevel(level);
   // Solvability guarantee: the opening hand always has a legal move against the
   // level's starting board (gems occupy cells, so this checks the real layout).
-  const drawn = generateSolvableTray(gen.board, state.rngState, state.pieceSeq, TRAY_SIZE);
+  const drawn = generateSolvableTray(gen.board, state.rngState, state.pieceSeq, TRAY_SIZE, 20, biasToBoard);
 
   // On gem levels, ride gems onto the first tray, draining the level's supply.
   let tray = drawn.pieces;
@@ -143,9 +147,14 @@ export function nextLevel(state: GameState): MoveResult {
   return startLevel(state, state.level + 1);
 }
 
-/** Retry the current level after a level-failed (same board pattern, fresh tray). */
+/**
+ * Retry the current level after a level-failed (same board pattern, fresh tray).
+ * The retry deal is biased toward pieces that fit — an anti-frustration rescue
+ * so a retry doesn't hand another near-unplaceable hand (still capped, so a
+ * skilled dead-end stays possible).
+ */
 export function retryLevel(state: GameState): MoveResult {
-  return startLevel(state, state.level);
+  return { ok: true, state: beginLevel(state, state.level, true), events: [] };
 }
 
 /** True iff no unplaced tray piece has any placement on the board. */

@@ -8,9 +8,10 @@ import {
   restart,
   retryLevel,
   startGame,
+  startLevel,
 } from './game';
 import { generateLevel } from './levels';
-import { generatePieces } from './pieces';
+import { generatePieces, trayHasPlacement } from './pieces';
 import { createBoard, idx } from './board';
 import { makeShape } from './shapes';
 import { BOARD_SIZE, TRAY_SIZE } from './types';
@@ -691,5 +692,43 @@ describe('applyMove — a refill can immediately end the game', () => {
     expect(types(res.events)).toContain('refill');
     expect(res.state.status).toBe('levelfailed');
     expect(types(res.events)).toContain('levelfailed');
+  });
+});
+
+describe('P8b — anti-frustration bias applies to Levels retry only', () => {
+  const ids = (s: GameState): string[] => s.tray.map((p) => p.shape.id);
+
+  // A failed level-2 state; retry and a fresh start both deal from this same
+  // (rngState, pieceSeq) against the same generated board — so any difference is
+  // the retry bias, nothing else.
+  const failedLevel2 = (): GameState =>
+    levelsState({
+      board: generateLevel(2).board,
+      gems: generateLevel(2).gems,
+      tray: [piece('a', single), piece('b', single), piece('c', single)],
+      level: 2,
+      goalType: 'gems',
+    });
+
+  it('endless restart deals a uniform (unbiased) tray — high-score integrity', () => {
+    const e = playing(createBoard(), [piece('a', single), piece('b', single), piece('c', single)]);
+    const r = restart(e);
+    const uniform = generatePieces(e.rngState, e.pieceSeq, TRAY_SIZE);
+    expect(ids(r.state)).toEqual(uniform.pieces.map((p) => p.shape.id));
+  });
+
+  it('retry biases (differs from the unbiased fresh-start path at the same seed)', () => {
+    const s = failedLevel2();
+    const retried = retryLevel(s).state;
+    const fresh = startLevel(s, s.level).state; // non-retry path = uniform
+    expect(ids(retried)).not.toEqual(ids(fresh)); // the bias diverges the stream
+    // Both still honor P8a — the opening hand is solvable either way.
+    expect(trayHasPlacement(retried.board, retried.tray)).toBe(true);
+    expect(trayHasPlacement(fresh.board, fresh.tray)).toBe(true);
+  });
+
+  it('retry is deterministic — same failed state yields the same biased tray', () => {
+    const s = failedLevel2();
+    expect(ids(retryLevel(s).state)).toEqual(ids(retryLevel(s).state));
   });
 });
