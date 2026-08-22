@@ -570,6 +570,48 @@ export function flushSaveGame(): void {
   saveGame(s, d);
 }
 
+// --- Deferred (idle-time) stats write ---
+// Same reasoning as the deferred game save above: stats changed on a scoring move
+// don't need to hit disk inside the placement frame. Callers should also only
+// schedule when a stat actually changed (see app.handlePlace).
+
+let pendingStats: Stats | null = null;
+let statsHandle: number | null = null;
+
+/**
+ * Schedule a coalesced, off-the-hot-path stats write at idle time (0ms-timeout
+ * fallback where requestIdleCallback is unavailable — e.g. older iOS). Rapid
+ * calls collapse into one write of the latest stats. Pair with flushSaveStats()
+ * on backgrounding / terminal screens so nothing is lost.
+ */
+export function scheduleSaveStats(stats: Stats): void {
+  pendingStats = stats;
+  if (statsHandle !== null) return; // already scheduled — coalesce
+  const run = (): void => {
+    statsHandle = null;
+    const s = pendingStats;
+    pendingStats = null;
+    if (s) saveStats(s);
+  };
+  statsHandle =
+    typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(run)
+      : (setTimeout(run, 0) as unknown as number);
+}
+
+/** Write any pending deferred stats synchronously (backgrounding / game over). */
+export function flushSaveStats(): void {
+  if (pendingStats === null) return;
+  const s = pendingStats;
+  pendingStats = null;
+  if (statsHandle !== null) {
+    if (typeof cancelIdleCallback === 'function') cancelIdleCallback(statsHandle);
+    else clearTimeout(statsHandle);
+    statsHandle = null;
+  }
+  saveStats(s);
+}
+
 // --- Daily Challenge state ---
 
 const DAILY_KEY = 'wbp.v1.daily';

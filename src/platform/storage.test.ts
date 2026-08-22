@@ -17,6 +17,8 @@ import {
   saveGame,
   scheduleSaveGame,
   flushSaveGame,
+  scheduleSaveStats,
+  flushSaveStats,
   loadEndlessSave,
   loadLevelsSave,
   hasEndlessSave,
@@ -588,6 +590,34 @@ describe('deferred save (idle-coalesced)', () => {
     flushSaveGame();
     expect(raw.setItem).toHaveBeenCalledTimes(1);
     expect(loadEndlessSave()?.score).toBe(999);
+  });
+
+  it('scheduleSaveStats defers the write; flushSaveStats performs it', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveStats({ gamesPlayed: 3, totalLines: 12, bestStreak: 4, bestScore: 500 });
+    expect(raw.setItem).not.toHaveBeenCalled(); // nothing written inside the placement frame
+    flushSaveStats();
+    expect(raw.setItem).toHaveBeenCalledTimes(1);
+    expect(loadStats().bestScore).toBe(500);
+  });
+
+  it('coalesces rapid stats schedules into one write of the latest stats', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveStats({ gamesPlayed: 1, totalLines: 1, bestStreak: 1, bestScore: 10 });
+    scheduleSaveStats({ gamesPlayed: 1, totalLines: 2, bestStreak: 1, bestScore: 20 });
+    flushSaveStats();
+    expect(raw.setItem).toHaveBeenCalledTimes(1);
+    expect(loadStats().bestScore).toBe(20);
+    expect(loadStats().totalLines).toBe(2);
+  });
+
+  it('flushSaveStats with nothing pending writes nothing', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    flushSaveStats();
+    expect(raw.setItem).not.toHaveBeenCalled();
   });
 
   it('a terminal clear cancels a pending deferred save (no resurrection)', () => {

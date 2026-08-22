@@ -55,13 +55,15 @@ import {
   saveSettings,
   loadStats,
   saveStats,
+  scheduleSaveStats,
+  flushSaveStats,
   loadSeenIntro,
   saveSeenIntro,
   type Settings,
   type Stats,
 } from './platform/storage';
 import { HAPTIC_CLEAR, HAPTIC_PLACE, setHapticsEnabled, vibrate } from './platform/haptics';
-import { playClear, playPlace, setSoundEnabled } from './platform/audio';
+import { playClear, playPlace, setSoundEnabled, warmAudio } from './platform/audio';
 import { createInstallController, type InstallController } from './platform/install';
 import {
   createScreens,
@@ -205,9 +207,15 @@ export class App {
     // synchronously when the app is backgrounded / hidden / closed so an iOS
     // app-switch, a reload, or a service-worker "Refresh" never loses it.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') flushSaveGame();
+      if (document.visibilityState === 'hidden') {
+        flushSaveGame();
+        flushSaveStats();
+      }
     });
-    window.addEventListener('pagehide', () => flushSaveGame());
+    window.addEventListener('pagehide', () => {
+      flushSaveGame();
+      flushSaveStats();
+    });
 
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
@@ -503,6 +511,9 @@ export class App {
     this.syncHintButton();
     this.screens.show('game');
     this.setInteractive(true);
+    // Build the AudioContext now (we're inside the menu click's gesture, so the
+    // autoplay policy is satisfied) rather than inside the first placement frame.
+    warmAudio();
     // This in-progress game becomes the resumable save (overwriting any stale one),
     // so starting/continuing a game is always what Continue would resume. Deferred
     // to idle; a flush on hide covers "started then immediately backgrounded".
@@ -617,6 +628,15 @@ export class App {
     let clearedAt: { x: number; y: number } | null = null;
     let linesCleared = 0;
     let gemsClearedThisMove: Record<number, number> | null = null;
+    /** Set when this move actually changed a stat (so we don't write on every move). */
+    let statsDirty = false;
+    /**
+     * Purely decorative effects (chip burst, score/combo pops), run on the NEXT
+     * frame so their DOM/canvas work doesn't stack onto this placement frame with
+     * the board render, audio and animations. Anchors are computed synchronously
+     * below (cached geometry) and captured, so nothing can shift under them.
+     */
+    const decorations: (() => void)[] = [];
 
     for (const ev of res.events) {
       switch (ev.type) {
@@ -634,28 +654,32 @@ export class App {
           this.boardView.animateCleared(ev.cells);
           linesCleared = ev.rows.length + ev.cols.length;
           this.stats = { ...this.stats, totalLines: this.stats.totalLines + linesCleared };
+          statsDirty = true;
           // Anchor the clear bonus / combo to the cleared line's centroid.
           clearedAt = this.boardView.cellsCenterClient(ev.cells);
           // Decorative wood-chip burst at the cleared cells.
           const pts = ev.cells
             .map((c) => this.boardView.cellCenterClient(c))
             .filter((p): p is { x: number; y: number } => p !== null);
-          this.particles.burst(pts);
+          decorations.push(() => this.particles.burst(pts));
           break;
         }
         case 'scored': {
           // Placement points float from the placed piece; the clear bonus from
           // the cleared line.
           const at = ev.kind === 'clear' ? clearedAt ?? placedAt : placedAt;
-          if (at) this.hud.popScore(ev.delta, at);
+          const delta = ev.delta;
+          if (at) decorations.push(() => this.hud.popScore(delta, at));
           break;
         }
         case 'combo': {
           if (ev.streak > this.stats.bestStreak) {
             this.stats = { ...this.stats, bestStreak: ev.streak };
+            statsDirty = true;
           }
           const at = clearedAt ?? placedAt;
-          if (at) this.hud.popCombo(ev.streak, ev.multiplier, at);
+          const { streak, multiplier } = ev;
+          if (at) decorations.push(() => this.hud.popCombo(streak, multiplier, at));
           break;
         }
         case 'gemsCleared': {
@@ -678,11 +702,23 @@ export class App {
     const streakMsg = this.streakAnnounce(prevStreak, prevGrace);
     this.announce(streakMsg ? `${moveMsg} ${streakMsg}` : moveMsg);
 
-    // Persist accumulated stats (best score / lines / streak updated above).
+    // Persist accumulated stats (best score / lines / streak updated above) —
+    // only when something actually changed, and at idle rather than inside this
+    // frame (localStorage is synchronous disk I/O). Terminal moves flush now, so
+    // the game-over / stats screens read fresh numbers.
     if (this.state.score > this.stats.bestScore) {
       this.stats = { ...this.stats, bestScore: this.state.score };
+      statsDirty = true;
     }
-    saveStats(this.stats);
+    if (statsDirty) scheduleSaveStats(this.stats);
+    if (this.state.status !== 'playing') flushSaveStats();
+
+    // Decorative effects run on the next frame (see `decorations`).
+    if (decorations.length > 0) {
+      requestAnimationFrame(() => {
+        for (const run of decorations) run();
+      });
+    }
 
     switch (this.state.status) {
       case 'gameover':

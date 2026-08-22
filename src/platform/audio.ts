@@ -80,6 +80,20 @@ function tone(ac: AudioContext, opts: ToneOpts): void {
   osc.stop(now + opts.duration);
 }
 
+/**
+ * Pre-create/resume the AudioContext from a user-gesture context (game entry), so
+ * the FIRST placement doesn't pay context construction inside its frame — a
+ * one-time but very perceptible hitch on old hardware. No-op when muted or when
+ * WebAudio is unavailable; never throws.
+ */
+export function warmAudio(): void {
+  try {
+    getCtx();
+  } catch {
+    /* never throw */
+  }
+}
+
 /** Soft, low wood "clack" when a piece is placed. */
 export function playPlace(): void {
   try {

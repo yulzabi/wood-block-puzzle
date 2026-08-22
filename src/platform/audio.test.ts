@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { playPlace, playClear, setSoundEnabled, _resetAudioForTest } from './audio';
+import { playPlace, playClear, setSoundEnabled, warmAudio, _resetAudioForTest } from './audio';
 
 function makeStubAudio() {
   const oscillators: Array<{ frequency: { value: number } }> = [];
@@ -71,6 +71,43 @@ describe('audio', () => {
     playPlace();
     playClear(4);
     expect(oscillators.length).toBe(0);
+  });
+
+  /** A context class that counts constructions (a vi.fn arrow can't be `new`ed). */
+  function countingCtx() {
+    const { FakeCtx, oscillators } = makeStubAudio();
+    const built: number[] = [];
+    class Counting extends FakeCtx {
+      constructor() {
+        super();
+        built.push(1);
+      }
+    }
+    return { Counting, built, oscillators };
+  }
+
+  it('warmAudio builds the context up front; the first place reuses it', () => {
+    const { Counting, built, oscillators } = countingCtx();
+    vi.stubGlobal('AudioContext', Counting);
+    warmAudio();
+    expect(built.length).toBe(1);
+    expect(oscillators.length).toBe(0); // warming is silent
+    playPlace();
+    expect(built.length).toBe(1); // reused, not rebuilt inside the frame
+    expect(oscillators.length).toBe(1);
+  });
+
+  it('warmAudio builds nothing when muted, and never throws without WebAudio', () => {
+    const { Counting, built } = countingCtx();
+    vi.stubGlobal('AudioContext', Counting);
+    setSoundEnabled(false);
+    warmAudio();
+    expect(built.length).toBe(0);
+
+    _resetAudioForTest();
+    vi.stubGlobal('AudioContext', undefined);
+    vi.stubGlobal('webkitAudioContext', undefined);
+    expect(() => warmAudio()).not.toThrow();
   });
 
   it('pitches the clear chime up with the streak count', () => {
