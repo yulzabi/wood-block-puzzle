@@ -51,8 +51,9 @@ export default defineConfig({
       registerType: 'prompt',
       // Exercise the service worker in dev so offline behavior can be validated early.
       devOptions: { enabled: true, type: 'module' },
-      // Precache these public assets in addition to the built JS/CSS/HTML.
-      includeAssets: ['icons/apple-touch-icon-180.png', 'icons/splash.png'],
+      // Precache the small home-screen icon in addition to the built JS/CSS/HTML.
+      // NOT the splash images — see globIgnores below (iOS fetches those itself).
+      includeAssets: ['icons/apple-touch-icon-180.png'],
       manifest: {
         name: 'Wood Block Puzzle',
         short_name: 'WoodBlocks',
@@ -77,6 +78,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // iOS fetches the ~2 MB of splash PNGs itself at add-to-home-screen time
+        // and never reads them through the SW — keep them OUT of the precache so
+        // the first-visit/install payload stays tiny. Manifest icons stay in.
+        globIgnores: ['**/icons/splash*.png'],
         cleanupOutdatedCaches: true,
       },
     }),
