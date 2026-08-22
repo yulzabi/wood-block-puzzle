@@ -166,11 +166,12 @@
   height: 88%;
   pointer-events: none;
   overflow: visible;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+  /* No filter: drop-shadow — it re-rasters the SVG on every paint (same bug class
+     as the ghost/checkmark). Depth comes from the stone's baked dark stroke below. */
 }
 .gem__stone {
   fill: var(--gem);
-  stroke: rgba(0, 0, 0, 0.45);
+  stroke: rgba(0, 0, 0, 0.55); /* baked edge — carries the depth the drop-shadow used to */
   stroke-width: 3;
   stroke-linejoin: round;
 }
@@ -252,13 +253,13 @@
   );
 }
 
-/* Line-completion hint: the full row/col a valid drop would clear glows warm.
+/* Line-completion hint: the full row/col a valid drop would clear is ringed warm.
    Static (no animation) so it is inherently reduced-motion-safe, and distinct
-   from the piece preview (which tints the landing cells green/red). */
+   from the piece preview (which tints the landing cells green/red). INSET-ONLY:
+   no outer glow, so the highlight never bleeds past the cell — a cell change
+   during a drag only damages that cell's own box, not a blurred halo around it. */
 .cell.line-hint {
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 216, 148, 0.9),
-    0 0 9px 1px rgba(255, 190, 110, 0.5);
+  box-shadow: inset 0 0 0 3px rgba(255, 216, 148, 0.95);
 }
 
 .cell.just-placed {
@@ -293,6 +294,20 @@
     inset 0 2px 0 rgba(255, 255, 255, 0.35),
     inset 0 -3px 4px rgba(0, 0, 0, 0.35),
     0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Paint diet for touch devices (the weak-GPU case that lags mid-drag). The rich
+   wood look — a linear-gradient + two color-mix()es + three box-shadows — is what
+   every churned cell repaints with during a drag (preview/line-hint flips, fills,
+   clears). On coarse pointers, swap it for a flat fill + one cheap un-blurred inset
+   highlight, so a repaint is nearly free. Desktop (pointer: fine) keeps the rich
+   look. Still reads as a solid wood tile. */
+@media (pointer: coarse) {
+  .cell.filled,
+  .block {
+    background: var(--block);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
+  }
 }
 
 /* ---- Tray ---- */
