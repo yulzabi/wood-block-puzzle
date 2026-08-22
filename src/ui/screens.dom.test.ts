@@ -184,7 +184,7 @@ describe('screens (DOM)', () => {
     expect(Array.from(s.home.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
   });
 
-  it('renderLevelCard shows Play/Replay for a non-resumable level, wired to onPlay', () => {
+  it('renderLevelCard shows Play/Replay (no Continue / Start over) for a non-resumable level', () => {
     const s = createScreens(root);
     const onPlay = vi.fn();
     renderLevelCard(s.overlay, {
@@ -194,20 +194,23 @@ describe('screens (DOM)', () => {
       objective: 'Clear 5 blue gems',
       resumable: false,
       onPlay,
+      onStartOver: vi.fn(),
       onClose: vi.fn(),
     });
 
     expect(s.overlay.querySelector('.level-card-objective')?.textContent).toBe('Clear 5 blue gems');
     expect(s.overlay.querySelector('.gameover-best')?.textContent).toContain('Best 240');
-    // Not resumable -> the completed level shows Replay (no Continue control).
-    expect(Array.from(s.overlay.querySelectorAll('button')).some((b) => b.textContent === 'Continue')).toBe(false);
+    const labels = Array.from(s.overlay.querySelectorAll('button')).map((b) => b.textContent);
+    expect(labels).not.toContain('Continue');
+    expect(labels).not.toContain('Start over');
     buttonByText(s.overlay, 'Replay').click();
     expect(onPlay).toHaveBeenCalledOnce();
   });
 
-  it('renderLevelCard shows a Continue control only when the level is resumable', () => {
+  it('renderLevelCard offers BOTH Continue and Start over when the level is resumable', () => {
     const s = createScreens(root);
     const onPlay = vi.fn();
+    const onStartOver = vi.fn();
     renderLevelCard(s.overlay, {
       level: 5,
       completed: false,
@@ -215,14 +218,20 @@ describe('screens (DOM)', () => {
       objective: 'Clear 5 blue gems',
       resumable: true,
       onPlay,
+      onStartOver,
       onClose: vi.fn(),
     });
 
-    // The actual control renders (asserting the element, not just a flag).
+    // Both actual controls render (asserting the elements, not just a flag).
     const cont = buttonByText(s.overlay, 'Continue');
+    const startOver = buttonByText(s.overlay, 'Start over');
     expect(cont).toBeDefined();
+    expect(startOver).toBeDefined();
     expect(s.overlay.querySelector('.level-card-objective')?.textContent).toBe('Game in progress');
-    cont.click();
-    expect(onPlay).toHaveBeenCalledOnce();
+
+    // Start over is a one-tap fresh start (no confirmation).
+    startOver.click();
+    expect(onStartOver).toHaveBeenCalledOnce();
+    expect(onPlay).not.toHaveBeenCalled();
   });
 });

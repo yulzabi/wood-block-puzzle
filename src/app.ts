@@ -310,6 +310,11 @@ export class App {
     // A resumable save exists for THIS level? Then the card offers Continue.
     const saved = loadLevelsSave();
     const resumable = saved !== null && saved.level === level;
+    // Fresh start: drop any stale levels save, then start the level anew.
+    const startFresh = (): void => {
+      clearLevelsSave();
+      this.playLevels(level);
+    };
     renderLevelCard(this.screens.overlay, {
       level,
       completed: res.completed,
@@ -317,13 +322,10 @@ export class App {
       objective: this.levelObjective(level),
       resumable,
       onPlay: () => {
-        if (resumable && saved) {
-          this.continueGame(saved);
-        } else {
-          clearLevelsSave(); // Play/Replay starts fresh — drop any stale levels save
-          this.playLevels(level);
-        }
+        if (resumable && saved) this.continueGame(saved);
+        else startFresh();
       },
+      onStartOver: startFresh,
       onClose: () => this.showLevelMap(),
     });
     this.screens.show('overlay');

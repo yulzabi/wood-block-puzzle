@@ -729,7 +729,10 @@ export interface LevelCardOpts {
   readonly objective: string;
   /** True when this exact level has a resumable in-progress save (→ "Continue"). */
   readonly resumable: boolean;
+  /** Primary action: Continue (resumable) or start Play/Replay (otherwise). */
   onPlay(): void;
+  /** Discard the saved game and start the level fresh (resumable cards only). */
+  onStartOver(): void;
   onClose(): void;
 }
 
@@ -749,14 +752,29 @@ export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void
   const best = el('p', 'gameover-best');
   best.textContent = opts.completed ? `Best ${opts.bestScore}` : 'Not cleared yet';
 
+  const cleanup = (): void => (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+
   const play = document.createElement('button');
   play.className = 'btn btn--primary';
   play.type = 'button';
   play.textContent = opts.resumable ? 'Continue' : opts.completed ? 'Replay' : 'Play';
   play.addEventListener('click', () => {
-    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    cleanup();
     opts.onPlay();
   });
+
+  // Resumable cards also offer a one-tap fresh start (mirrors Endless "New game").
+  let startOver: HTMLButtonElement | null = null;
+  if (opts.resumable) {
+    startOver = document.createElement('button');
+    startOver.className = 'btn btn--ghost';
+    startOver.type = 'button';
+    startOver.textContent = 'Start over';
+    startOver.addEventListener('click', () => {
+      cleanup();
+      opts.onStartOver();
+    });
+  }
 
   const back = document.createElement('button');
   back.className = 'btn btn--ghost';
@@ -765,11 +783,11 @@ export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void
   back.addEventListener('click', () => close());
 
   function close(): void {
-    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    cleanup();
     opts.onClose();
   }
 
-  panel.append(label, objective, best, play, back);
+  panel.append(label, objective, best, play, ...(startOver ? [startOver] : []), back);
   overlay.append(panel);
   replayEnter(panel);
   wireOverlay(panel, close);
