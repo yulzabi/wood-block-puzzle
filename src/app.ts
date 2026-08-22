@@ -21,12 +21,16 @@ import {
   startGame,
 } from './core/game';
 import { canPlace, firstPlacement, linesCompletedBy } from './core/board';
+import { generateLevel } from './core/levels';
 import {
   loadHighScore,
   saveHighScore,
   loadLevelProgress,
   saveLevelProgress,
   saveLevelResult,
+  loadLevelResults,
+  levelResult,
+  nextLevelToPlay,
   loadSettings,
   saveSettings,
   loadStats,
@@ -48,9 +52,12 @@ import {
   renderIntro,
   renderLevelComplete,
   renderLevelFailed,
+  renderLevelMap,
+  renderLevelCard,
   renderSettings,
   renderStats,
   type InstallAffordance,
+  type LevelMapNode,
   type Screens,
 } from './ui/screens';
 import { BoardView } from './ui/board-view';
@@ -193,7 +200,7 @@ export class App {
   /** Render the home menu and (re)attach the install affordance below it. */
   private renderHomeScreen(): void {
     renderHome(this.screens.home, {
-      onLevels: () => this.playLevels(loadLevelProgress()),
+      onLevels: () => this.showLevelMap(),
       onEndless: () => this.playEndless(),
       currentLevel: loadLevelProgress(),
       onSettings: () => this.showSettings(),
@@ -201,6 +208,62 @@ export class App {
       onHowTo: () => this.showIntro(),
     });
     if (this.installAffordance) this.screens.home.append(this.installAffordance.el);
+  }
+
+  // ---- Level Map ----
+  /** Build the map's node list — the single place that uses nextLevelToPlay. */
+  private levelMapNodes(): LevelMapNode[] {
+    const highestReached = loadLevelProgress();
+    const results = loadLevelResults();
+    const current = nextLevelToPlay(results, highestReached);
+    // Show reached levels plus a short horizon of locked ones ahead (capped).
+    const total = Math.min(Math.max(highestReached + 3, 10), 60);
+    const nodes: LevelMapNode[] = [];
+    for (let level = 1; level <= total; level++) {
+      const res = levelResult(results, level);
+      // Unlocked iff reached; the focal node is always playable even at the frontier.
+      const unlocked = level <= highestReached || level === current;
+      const state = res.completed ? 'completed' : unlocked ? 'unlocked' : 'locked';
+      nodes.push({ level, state, current: level === current, bestScore: res.bestScore });
+    }
+    return nodes;
+  }
+
+  /** Show the Level Map (Home → Levels lands here, not straight into play). */
+  private showLevelMap(): void {
+    renderLevelMap(this.screens.levelmap, {
+      nodes: this.levelMapNodes(),
+      onPlay: (level) => this.showLevelCard(level),
+      onBack: () => this.goHome(),
+    });
+    this.screens.show('levelmap');
+  }
+
+  /** A concise spoken/visible objective for `level` (from its regenerated plan). */
+  private levelObjective(level: number): string {
+    const gen = generateLevel(level);
+    if (gen.goalType === 'gems') {
+      const parts = Object.entries(gen.quotas)
+        .map(([color, n]) => ({ color: Number(color), n }))
+        .sort((a, b) => a.color - b.color)
+        .map(({ color, n }) => `${n} ${gemColorName(color)}`);
+      return `Clear ${parts.join(', ')} gems`;
+    }
+    return `Reach ${gen.targetScore} points`;
+  }
+
+  /** Tapping an unlocked node opens a card to play (or replay) that level. */
+  private showLevelCard(level: number): void {
+    const res = levelResult(loadLevelResults(), level);
+    renderLevelCard(this.screens.overlay, {
+      level,
+      completed: res.completed,
+      bestScore: res.bestScore,
+      objective: this.levelObjective(level),
+      onPlay: () => this.playLevels(level),
+      onClose: () => this.showLevelMap(),
+    });
+    this.screens.show('overlay');
   }
 
   // ---- Overlays: settings / stats / intro ----

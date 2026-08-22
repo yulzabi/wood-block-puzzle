@@ -79,8 +79,19 @@ paths glow completed lines + announce "clears N lines"; count logic shared via
 - [ ] Owner on-device check after push: the warm line-hint glow reads as distinct from the
   green/red placement preview, and clears cleanly on drop.
 
-## P2 — Hints (OFF by default)
+## P4 — Level Map + per-level history
 
+**Status: CODE-COMPLETE (P4a d4102c8 results store + `nextLevelToPlay`; P4b determinism;
+P4c/P4d f79d8f4 winding-trail map UI + a11y). No stars (owner). Highlight = focal "next to
+play" node via the one tested `nextLevelToPlay` helper (sole caller `levelMapNodes()` in
+app.ts). Locked nodes = native `disabled` (not clickable/focusable). Replay regenerates via
+`newLevelsGame`. Home: Levels→map. 213 green.**
+
+- [ ] **Owner on-device pass (PENDING):** trail reads well; the glowing "current" node is
+  obviously the one to play; tapping a node opens the right level + Play/Replay starts it;
+  locked nodes clearly locked; keyboard nav works.
+
+## P2 — Hints (OFF by default)
 **Status: DONE (P2a 5ab1892 `firstPlacement` core + `hasAnyPlacement` refactor to delegate;
 P2b aae0309 settings + in-game Hint button). Defaults OFF; per-field settings load is
 backward-compatible with legacy blobs; button absent from DOM when off; single-highlight
@@ -94,11 +105,10 @@ backward-compatible with legacy blobs; button absent from DOM when off; single-h
   ORDER (blue→amber→red) active regardless; screen-reader color names always present. Backward-
   compat load + default-false tested. 199 green. Records the letter-drop as a deliberate,
   user-controlled decision (not a silent reversal).
-- [ ] **GEM-DIAMOND-SHAPE — LIKELY RESOLVED by fa5db38** (faceted 5-point gemstone polygon,
-  inherently non-square, replaced the rotated-square that read as a square). **Owner to confirm
-  ON DEVICE** it now reads as a gem, at both board (~40px) and tray (22px) sizes. If still off,
-  the cause was owner-identified as the square cell BACKGROUND behind the marker — suppress the
-  `.filled` wood-block bg on gem cells (`.cell:has(.gem)` transparent / `.cell--gem` modifier).
+- [x] **GEM-DIAMOND-SHAPE — RESOLVED & CONFIRMED ON DEVICE (2026-08-21).** The faceted 5-point
+  gemstone polygon (fa5db38) reads as a gem with the colorblind toggle OFF (owner-confirmed);
+  the earlier rotated-square approach was the cause. Both visual gates passed: default gemstone
+  = gem, toggle-ON letters legible at board + tray sizes.
 
 **Progress: Slices 0–3 DONE. Slice 1 (904060b) migration; Slice 2 (77d9fab) generation +
 solvability invariant; Slice 3 (48f054c) engine either/or win + `gemsCleared` event

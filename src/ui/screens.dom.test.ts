@@ -1,6 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createScreens, renderConfirm, renderGameOver, renderSettings } from './screens';
+import {
+  createScreens,
+  renderConfirm,
+  renderGameOver,
+  renderSettings,
+  renderLevelMap,
+  renderLevelCard,
+} from './screens';
 
 function buttonByText(root: HTMLElement, text: string): HTMLButtonElement {
   const btn = Array.from(root.querySelectorAll('button')).find((b) => b.textContent === text);
@@ -122,5 +129,60 @@ describe('screens (DOM)', () => {
     cb.click();
     expect(onChange).toHaveBeenCalledWith({ sound: true, haptics: true, hints: false, colorblindGems: true });
     expect(cb.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('renderLevelMap renders locked / completed / current node states as buttons', () => {
+    const s = createScreens(root);
+    const onPlay = vi.fn();
+    const onBack = vi.fn();
+    renderLevelMap(s.levelmap, {
+      nodes: [
+        { level: 1, state: 'completed', current: false, bestScore: 100 },
+        { level: 2, state: 'unlocked', current: true, bestScore: 0 },
+        { level: 3, state: 'locked', current: false, bestScore: 0 },
+      ],
+      onPlay,
+      onBack,
+    });
+
+    const nodes = Array.from(s.levelmap.querySelectorAll<HTMLButtonElement>('.level-node'));
+    expect(nodes.length).toBe(3);
+
+    // Completed: enabled, labeled by state, shows the best score.
+    expect(nodes[0]!.disabled).toBe(false);
+    expect(nodes[0]!.getAttribute('aria-label')).toBe('Level 1, completed, best 100');
+    expect(nodes[0]!.querySelector('.level-node-score')?.textContent).toBe('100');
+
+    // Current focal node: highlighted, labeled "current", clickable -> onPlay.
+    expect(nodes[1]!.classList.contains('level-node--current')).toBe(true);
+    expect(nodes[1]!.getAttribute('aria-label')).toBe('Level 2, current');
+    nodes[1]!.click();
+    expect(onPlay).toHaveBeenCalledWith(2);
+
+    // Locked: disabled — not clickable, not keyboard-focusable into a play action.
+    expect(nodes[2]!.disabled).toBe(true);
+    expect(nodes[2]!.getAttribute('aria-label')).toBe('Level 3, locked');
+
+    buttonByText(s.levelmap, '← Menu').click();
+    expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it('renderLevelCard shows the objective + best score and wires Replay for a completed level', () => {
+    const s = createScreens(root);
+    const onPlay = vi.fn();
+    const onClose = vi.fn();
+    renderLevelCard(s.overlay, {
+      level: 5,
+      completed: true,
+      bestScore: 240,
+      objective: 'Clear 5 blue gems',
+      onPlay,
+      onClose,
+    });
+
+    expect(s.overlay.querySelector('.level-card-objective')?.textContent).toBe('Clear 5 blue gems');
+    expect(s.overlay.querySelector('.gameover-best')?.textContent).toContain('Best 240');
+    buttonByText(s.overlay, 'Replay').click();
+    expect(onPlay).toHaveBeenCalledOnce();
   });
 });

@@ -9,15 +9,17 @@
 
 import type { Settings, Stats } from '../platform/storage';
 
-export type ScreenName = 'home' | 'game' | 'gameover' | 'overlay';
+export type ScreenName = 'home' | 'game' | 'gameover' | 'overlay' | 'levelmap';
 
 export interface Screens {
   readonly frame: HTMLElement;
   readonly home: HTMLElement;
   readonly game: HTMLElement;
   readonly gameover: HTMLElement;
-  /** Generic modal overlay surface (settings / stats / first-run intro). */
+  /** Generic modal overlay surface (settings / stats / first-run intro / level card). */
   readonly overlay: HTMLElement;
+  /** The Level Map (winding trail of level nodes). */
+  readonly levelmap: HTMLElement;
   show(name: ScreenName): void;
 }
 
@@ -42,10 +44,14 @@ export function createScreens(root: HTMLElement): Screens {
   overlay.id = 'screen-overlay';
   overlay.hidden = true;
 
-  frame.append(home, game, gameover, overlay);
+  const levelmap = el('section', 'screen');
+  levelmap.id = 'screen-levelmap';
+  levelmap.hidden = true;
+
+  frame.append(home, game, gameover, overlay, levelmap);
   root.append(frame);
 
-  const map: Record<ScreenName, HTMLElement> = { home, game, gameover, overlay };
+  const byName: Record<ScreenName, HTMLElement> = { home, game, gameover, overlay, levelmap };
 
   return {
     frame,
@@ -53,12 +59,13 @@ export function createScreens(root: HTMLElement): Screens {
     game,
     gameover,
     overlay,
+    levelmap,
     show(name: ScreenName): void {
-      (Object.keys(map) as ScreenName[]).forEach((key) => {
-        map[key].hidden = key !== name;
+      (Object.keys(byName) as ScreenName[]).forEach((key) => {
+        byName[key].hidden = key !== name;
       });
       // Retrigger the app-like enter transition each time a screen is shown.
-      const shown = map[name];
+      const shown = byName[name];
       shown.classList.remove('screen-enter');
       void shown.offsetWidth;
       shown.classList.add('screen-enter');
@@ -573,6 +580,147 @@ export function renderLevelFailed(overlay: HTMLElement, opts: LevelFailedOpts): 
   panel.append(label, title, hint, retry, home);
   overlay.append(panel);
   replayEnter(panel);
+}
+
+/** A node on the Level Map. State + focal flag are decided by the caller. */
+export interface LevelMapNode {
+  readonly level: number;
+  /** locked = not yet reachable; unlocked = playable, not completed; completed = cleared. */
+  readonly state: 'locked' | 'unlocked' | 'completed';
+  /** The single focal "next to play" node (from nextLevelToPlay — one source of truth). */
+  readonly current: boolean;
+  /** Best score, shown on completed nodes. */
+  readonly bestScore: number;
+}
+
+/** Options for the Level Map screen. */
+export interface LevelMapOpts {
+  readonly nodes: readonly LevelMapNode[];
+  /** Called with the level number when an unlocked node is chosen. */
+  onPlay(level: number): void;
+  onBack(): void;
+}
+
+/** Build one level node as a real <button> (locked nodes are disabled). */
+function levelNodeButton(node: LevelMapNode, onPlay: (level: number) => void): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = `level-node level-node--${node.state}`;
+  if (node.current) btn.classList.add('level-node--current');
+
+  const locked = node.state === 'locked';
+  btn.disabled = locked; // native: not clickable, not keyboard-focusable
+
+  // aria-label: "Level 7, completed, best 340" / "Level 8, current" / "Level 12, locked".
+  let label = `Level ${node.level}`;
+  if (locked) label += ', locked';
+  else if (node.current) label += ', current';
+  else if (node.state === 'completed') label += `, completed, best ${node.bestScore}`;
+  else label += ', unlocked';
+  btn.setAttribute('aria-label', label);
+
+  const num = el('span', 'level-node-num');
+  num.textContent = String(node.level);
+  btn.append(num);
+
+  if (node.state === 'completed') {
+    const score = el('span', 'level-node-score');
+    score.textContent = String(node.bestScore);
+    btn.append(score);
+  }
+  if (locked) {
+    const lock = el('span', 'level-node-lock');
+    lock.textContent = '🔒';
+    lock.setAttribute('aria-hidden', 'true');
+    btn.append(lock);
+  }
+
+  if (!locked) btn.addEventListener('click', () => onPlay(node.level));
+  return btn;
+}
+
+/**
+ * Populate the Level Map: a scrollable winding trail of level nodes. Each node
+ * carries its own state + focal flag (decided by the caller via nextLevelToPlay),
+ * so this renderer never re-derives which node glows.
+ */
+export function renderLevelMap(screen: HTMLElement, opts: LevelMapOpts): void {
+  screen.textContent = '';
+
+  const wrap = el('div', 'level-map');
+
+  const header = el('div', 'level-map-header');
+  const back = document.createElement('button');
+  back.className = 'btn btn--ghost level-map-back';
+  back.type = 'button';
+  back.setAttribute('aria-label', 'Back to menu');
+  back.textContent = '← Menu';
+  back.addEventListener('click', opts.onBack);
+  const title = el('h2', 'level-map-title');
+  title.textContent = 'Levels';
+  header.append(back, title);
+
+  const trail = el('div', 'level-trail');
+  for (const node of opts.nodes) trail.append(levelNodeButton(node, opts.onPlay));
+
+  wrap.append(header, trail);
+  screen.append(wrap);
+
+  // Bring the focal node into view (no-op where scrollIntoView is unavailable).
+  trail.querySelector<HTMLElement>('.level-node--current')?.scrollIntoView?.({ block: 'center' });
+}
+
+/** Options for the per-level card (opened from a map node). */
+export interface LevelCardOpts {
+  readonly level: number;
+  readonly completed: boolean;
+  readonly bestScore: number;
+  /** Human objective summary, e.g. "Clear 5 blue gems" or "Reach 100 points". */
+  readonly objective: string;
+  onPlay(): void;
+  onClose(): void;
+}
+
+/** Populate the level card overlay: objective, best score, Play/Replay, Back. */
+export function renderLevelCard(overlay: HTMLElement, opts: LevelCardOpts): void {
+  overlay.textContent = '';
+  overlay.classList.add('overlay');
+
+  const panel = el('div', 'gameover-panel level-card');
+
+  const label = el('p', 'gameover-score-label');
+  label.textContent = `LEVEL ${opts.level}`;
+
+  const objective = el('p', 'level-card-objective');
+  objective.textContent = opts.objective;
+
+  const best = el('p', 'gameover-best');
+  best.textContent = opts.completed ? `Best ${opts.bestScore}` : 'Not cleared yet';
+
+  const play = document.createElement('button');
+  play.className = 'btn btn--primary';
+  play.type = 'button';
+  play.textContent = opts.completed ? 'Replay' : 'Play';
+  play.addEventListener('click', () => {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onPlay();
+  });
+
+  const back = document.createElement('button');
+  back.className = 'btn btn--ghost';
+  back.type = 'button';
+  back.textContent = 'Back';
+  back.addEventListener('click', () => close());
+
+  function close(): void {
+    (panel as HTMLElement & { _cleanup?: () => void })._cleanup?.();
+    opts.onClose();
+  }
+
+  panel.append(label, objective, best, play, back);
+  overlay.append(panel);
+  replayEnter(panel);
+  wireOverlay(panel, close);
 }
 
 /** Retrigger the panel enter animation. */

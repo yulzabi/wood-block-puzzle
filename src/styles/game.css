@@ -570,6 +570,143 @@
   line-height: 1;
 }
 
+/* ---- Level Map: winding trail of carved level medallions ---- */
+.level-map {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 8px)
+    12px
+    calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+.level-map-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.level-map-back {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 16px;
+}
+.level-map-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* Scrollable trail. A central "rope" runs down the middle; nodes zig-zag around
+   it like beads on a winding path. */
+.level-trail {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0 32px;
+}
+.level-trail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 6px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    180deg,
+    var(--wood-3) 0,
+    var(--wood-3) 10px,
+    var(--wood-5) 10px,
+    var(--wood-5) 20px
+  );
+  opacity: 0.5;
+}
+/* Zig-zag the medallions off the central rope. */
+.level-node:nth-child(odd) { transform: translateX(-46px); }
+.level-node:nth-child(even) { transform: translateX(46px); }
+
+.level-node {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 66px;
+  height: 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  background: radial-gradient(120% 120% at 35% 25%, var(--wood-2), var(--wood-5));
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -4px 6px rgba(0, 0, 0, 0.3);
+}
+.level-node:active { transform: translateY(2px) translateX(var(--zig, 0)); }
+.level-node-num {
+  font-size: 22px;
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+.level-node-score {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffe08a;
+  font-variant-numeric: tabular-nums;
+}
+.level-node-lock {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Completed: a warm gold ring. */
+.level-node--completed {
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3),
+    0 0 0 3px rgba(255, 208, 120, 0.85);
+}
+/* Locked: dimmed, not interactive. */
+.level-node--locked {
+  cursor: default;
+  filter: grayscale(0.5) brightness(0.6);
+  color: var(--text-dim);
+}
+/* Current focal node: brighter ring + a gentle pulse (disabled under reduced motion). */
+.level-node--current {
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.35),
+    0 0 0 4px var(--preview-valid);
+  animation: node-pulse 1.6s ease-in-out infinite;
+}
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.35), 0 0 0 4px var(--preview-valid); }
+  50% { box-shadow: 0 4px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.35), 0 0 0 8px rgba(111, 191, 115, 0.35); }
+}
+
+/* ---- Level card (opened from a map node) ---- */
+.level-card-objective {
+  margin: 2px 0 4px;
+  font-size: 15px;
+  color: var(--text);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cell.just-placed,
   .cell.just-cleared,
@@ -580,4 +717,5 @@
   }
   .gameover-panel { opacity: 1; transform: none; }
   .sw-toast { transition: none; }
+  .level-node--current { animation: none; }
 }
