@@ -191,11 +191,10 @@
 }
 
 .board {
-  /* Geometry shared by the cell grid and the highlight overlay (must match so the
-     overlay aligns pixel-perfect with the cells). */
+  /* --board-gap is shared with the .board-hl overlay's internal grid (its gaps
+     must match the tracks it spans); --board-pad is the board's own inset only. */
   --board-pad: 8px;
   --board-gap: 5px;
-  position: relative; /* containing block for the .board-hl overlay */
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
@@ -297,20 +296,21 @@
    this cheap, mostly-transparent layer, never the board's fill/gem texture
    (measured: whole-board damage unions were the drag-lag remainder). */
 .board-hl {
-  position: absolute;
-  inset: 0;
-  padding: var(--board-pad);
+  /* A grid ITEM of the board's own grid, spanning every track — its box comes
+     from the exact same track math that places the cells, so it aligns with
+     them by construction in every engine. Do NOT position this absolutely:
+     iOS WebKit resolved the previous `position:absolute; inset:0; padding`
+     box 16px (2×pad) short in height, drifting the highlights 2px per row
+     (measured on device: hlΔ 63:(0.0,-14.0) — perf plan §7, 2026-08-22). */
+  grid-area: 1 / 1 / -1 / -1;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
   gap: var(--board-gap);
   pointer-events: none;
-  /* Layer promotion via a real transform, NOT will-change: iOS WebKit drew the
-     will-change-promoted layer offset from its layout position (rings sat high
-     of the bricks on iPad only; layout measured 0px off — see perf plan §7,
-     2026-08-22). Size containment removed for the same reason: the box is
-     inset-sized, so `layout paint` gives the same isolation minus the combo
-     that triggered the misplacement. */
+  /* Own composited layer (real transform, not will-change): highlight churn
+     during a drag repaints this cheap, mostly-transparent layer — never the
+     board texture. That isolation is the plan-B drag-perf win; keep it. */
   transform: translateZ(0);
   contain: layout paint;
 }

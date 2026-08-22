@@ -89,7 +89,9 @@ export function startPerfProbe(): void {
     const d = (cell: Element, hcell: Element): string => {
       const a = cell.getBoundingClientRect();
       const b = hcell.getBoundingClientRect();
-      if (a.width === 0) return 'hidden';
+      // Zero-size = not laid out (hidden screen, or a broken grid): deltas
+      // between zero rects would read as a false 0.0 — say so instead.
+      if (a.width === 0 || a.height === 0 || b.width === 0 || b.height === 0) return 'hidden';
       return `${(b.left - a.left).toFixed(1)},${(b.top - a.top).toFixed(1)}`;
     };
     return `0:(${d(sample.c0, sample.h0)}) 63:(${d(sample.c63, sample.h63)})`;

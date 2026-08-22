@@ -78,6 +78,11 @@ export class BoardView {
       const row = Math.floor(i / BOARD_SIZE);
       const col = i % BOARD_SIZE;
       cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, empty`);
+      // Explicit placement (not auto-flow): the .board-hl overlay spans the whole
+      // explicit grid, and auto-placed items would be pushed past it into
+      // collapsed implicit rows. Explicitly-placed items may overlap the overlay.
+      cell.style.gridRow = String(row + 1);
+      cell.style.gridColumn = String(col + 1);
       this.cells.push(cell);
       this.el.append(cell);
     }
