@@ -35,19 +35,28 @@
 /* ---- HUD ---- */
 .hud {
   flex: 0 0 auto;
-  position: relative; /* positioning context for the streak badge */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* ---- Streak badge (standing multiplier + grace shield) ---- */
-/* Pinned to the HUD's top-right corner. Shown only at streak ≥ 2 (JS toggles
-   [hidden]). The ×N is real text (never color-only); it warms hotter as --warm
-   climbs. The grace shield reads as "spent" by SHAPE (a slash) + dimming, so the
-   forgiven-miss state is legible without relying on color. */
+/* The badge sits in its own reserved line ABOVE the score boxes (right-aligned),
+   so it never overlaps SCORE/BEST or the levels boxes at any width. The line
+   reserves its height whether or not the badge is showing, so the board doesn't
+   shift when a streak starts. */
+.hud-streak-line {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* Shown only at streak ≥ 2 (JS toggles [hidden]). The ×N is real text (never
+   color-only); it warms hotter as --warm climbs. The grace shield reads as
+   "spent" by SHAPE (a slash) + dimming, so the forgiven-miss state is legible
+   without relying on color. */
 .streak-badge {
-  position: absolute;
-  top: -2px;
-  right: 0;
-  z-index: 2;
   display: flex;
   align-items: center;
   gap: 5px;

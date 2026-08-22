@@ -73,7 +73,13 @@ export class HUD {
     this.streakShieldEl.className = 'streak-badge__shield';
     this.streakBadge.append(this.streakMultEl, this.streakShieldEl);
 
-    this.el.append(this.endlessRow, this.levelsRow, this.gemsRow, this.streakBadge);
+    // The badge lives in its OWN reserved line above the score boxes — a flow slot,
+    // not an absolute overlay — so it can never obscure SCORE/BEST at any width.
+    const streakLine = document.createElement('div');
+    streakLine.className = 'hud-streak-line';
+    streakLine.append(this.streakBadge);
+
+    this.el.append(streakLine, this.endlessRow, this.levelsRow, this.gemsRow);
   }
 
   /**
