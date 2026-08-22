@@ -6,6 +6,7 @@
 
 import type { GameState, GameMode, GameStatus, GoalType, Piece } from '../core/types';
 import { BOARD_SIZE } from '../core/types';
+import { DEFAULT_DAILY_STATE, type DailyState } from '../core/daily';
 
 const HIGH_SCORE_KEY = 'wbp.v1.highscore';
 const LEVEL_KEY = 'wbp.v1.level';
@@ -539,4 +540,60 @@ export function flushSaveGame(): void {
   const s = pendingSave;
   cancelPendingSave();
   saveGame(s);
+}
+
+// --- Daily Challenge state ---
+
+const DAILY_KEY = 'wbp.v1.daily';
+const isDateStr = (x: unknown): x is string => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+
+/** Coerce a stored `lastResult` blob to `{ score } | null`. */
+function normalizeResult(x: unknown): DailyState['lastResult'] {
+  if (typeof x !== 'object' || x === null) return null;
+  const score = (x as Record<string, unknown>)['score'];
+  return isNum(score) ? { score: Math.max(0, Math.floor(score)) } : null;
+}
+
+/** Load the daily-challenge record. Corrupt/missing/unavailable → fresh defaults; never throws. */
+export function loadDaily(): DailyState {
+  const storage = getStorage();
+  if (!storage) return { ...DEFAULT_DAILY_STATE };
+  try {
+    const raw = storage.getItem(DAILY_KEY);
+    if (raw === null) return { ...DEFAULT_DAILY_STATE };
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return { ...DEFAULT_DAILY_STATE };
+    const obj = parsed as Record<string, unknown>;
+    return {
+      lastPlayedDate: isDateStr(obj['lastPlayedDate']) ? obj['lastPlayedDate'] : null,
+      lastCompletedDate: isDateStr(obj['lastCompletedDate']) ? obj['lastCompletedDate'] : null,
+      lastResult: normalizeResult(obj['lastResult']),
+      currentStreak: toCount(obj['currentStreak'], 0),
+      longestStreak: toCount(obj['longestStreak'], 0),
+      bestScore: toCount(obj['bestScore'], 0),
+    };
+  } catch {
+    return { ...DEFAULT_DAILY_STATE };
+  }
+}
+
+/** Persist the daily-challenge record. Silent no-op on any failure. */
+export function saveDaily(state: DailyState): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(
+      DAILY_KEY,
+      JSON.stringify({
+        lastPlayedDate: isDateStr(state.lastPlayedDate) ? state.lastPlayedDate : null,
+        lastCompletedDate: isDateStr(state.lastCompletedDate) ? state.lastCompletedDate : null,
+        lastResult: normalizeResult(state.lastResult),
+        currentStreak: toCount(state.currentStreak, 0),
+        longestStreak: toCount(state.longestStreak, 0),
+        bestScore: toCount(state.bestScore, 0),
+      }),
+    );
+  } catch {
+    // Quota exceeded / disabled — silently ignore.
+  }
 }

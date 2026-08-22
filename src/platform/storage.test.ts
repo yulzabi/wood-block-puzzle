@@ -23,7 +23,10 @@ import {
   hasLevelsSave,
   clearEndlessSave,
   clearLevelsSave,
+  loadDaily,
+  saveDaily,
 } from './storage';
+import { DEFAULT_DAILY_STATE, type DailyState } from '../core/daily';
 import type { GameState, Piece } from '../core/types';
 import { BOARD_SIZE } from '../core/types';
 import { SHAPES } from '../core/shapes';
@@ -628,5 +631,101 @@ describe('nextLevelToPlay', () => {
       3: { completed: true, bestScore: 3 },
     };
     expect(nextLevelToPlay(results, 3)).toBe(4);
+  });
+});
+
+describe('daily challenge persistence', () => {
+  const DAILY_KEY = 'wbp.v1.daily';
+  const richDaily: DailyState = {
+    lastPlayedDate: '2026-08-22',
+    lastCompletedDate: '2026-08-22',
+    lastResult: { score: 750 },
+    currentStreak: 4,
+    longestStreak: 9,
+    bestScore: 1200,
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips a daily record', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveDaily(richDaily);
+    expect(loadDaily()).toEqual(richDaily);
+  });
+
+  it('returns fresh defaults when the key is missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadDaily()).toEqual(DEFAULT_DAILY_STATE);
+  });
+
+  it('returns defaults on corrupt JSON', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(DAILY_KEY, 'not json {');
+    expect(loadDaily()).toEqual(DEFAULT_DAILY_STATE);
+  });
+
+  it('coerces bad fields per-field (bad dates → null, bad numbers → 0, bad result → null)', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(
+      DAILY_KEY,
+      JSON.stringify({
+        lastPlayedDate: 'yesterday', // not YYYY-MM-DD
+        lastCompletedDate: 42, // not a string
+        lastResult: { score: 'lots' }, // not numeric
+        currentStreak: -3, // negative
+        longestStreak: 2.5, // non-integer
+        bestScore: 500,
+      }),
+    );
+    expect(loadDaily()).toEqual({
+      lastPlayedDate: null,
+      lastCompletedDate: null,
+      lastResult: null,
+      currentStreak: 0,
+      longestStreak: 0,
+      bestScore: 500,
+    });
+  });
+
+  it('backward-compat: a partial blob loads with the missing fields defaulted', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(DAILY_KEY, JSON.stringify({ currentStreak: 3, bestScore: 200 }));
+    expect(loadDaily()).toEqual({
+      lastPlayedDate: null,
+      lastCompletedDate: null,
+      lastResult: null,
+      currentStreak: 3,
+      longestStreak: 0,
+      bestScore: 200,
+    });
+  });
+
+  it('normalizes a fractional/negative stored result score on load', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(DAILY_KEY, JSON.stringify({ ...richDaily, lastResult: { score: 12.9 } }));
+    expect(loadDaily().lastResult).toEqual({ score: 12 });
+  });
+
+  it('defaults without throwing when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadDaily()).not.toThrow();
+    expect(loadDaily()).toEqual(DEFAULT_DAILY_STATE);
+    expect(() => saveDaily(richDaily)).not.toThrow();
+  });
+
+  it('save is a silent no-op when setItem throws (quota exceeded)', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    raw.setItem.mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(() => saveDaily(richDaily)).not.toThrow();
   });
 });
