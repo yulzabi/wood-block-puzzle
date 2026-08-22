@@ -31,7 +31,8 @@ import {
   loadLevelResults,
   levelResult,
   nextLevelToPlay,
-  saveGame,
+  scheduleSaveGame,
+  flushSaveGame,
   loadEndlessSave,
   loadLevelsSave,
   hasEndlessSave,
@@ -184,16 +185,13 @@ export class App {
     this.keyboard.attach();
     this.syncHintButton();
 
-    // Persist the in-progress game when the app is backgrounded or the tab is
-    // hidden/closed, so an iOS app-switch or a service-worker "Refresh" doesn't
-    // nuke it. Only save while actually playing.
-    const persistIfPlaying = (): void => {
-      if (this.state.status === 'playing') saveGame(this.state);
-    };
+    // The per-move save is deferred to idle (off the placement frame); flush it
+    // synchronously when the app is backgrounded / hidden / closed so an iOS
+    // app-switch, a reload, or a service-worker "Refresh" never loses it.
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') persistIfPlaying();
+      if (document.visibilityState === 'hidden') flushSaveGame();
     });
-    window.addEventListener('pagehide', persistIfPlaying);
+    window.addEventListener('pagehide', () => flushSaveGame());
 
     this.state = newGame(Date.now(), loadHighScore());
     this.renderHomeScreen();
@@ -438,8 +436,9 @@ export class App {
     this.screens.show('game');
     this.setInteractive(true);
     // This in-progress game becomes the resumable save (overwriting any stale one),
-    // so starting/continuing a game is always what Continue would resume.
-    saveGame(this.state);
+    // so starting/continuing a game is always what Continue would resume. Deferred
+    // to idle; a flush on hide covers "started then immediately backgrounded".
+    scheduleSaveGame(this.state);
     if (this.state.mode === 'levels') {
       this.announce(this.objectiveMessage());
     } else {
@@ -617,8 +616,9 @@ export class App {
         this.onLevelFailed();
         return;
       default:
-        // Still playing — snapshot so a reload/backgrounding resumes this move.
-        saveGame(this.state);
+        // Still playing — snapshot (deferred to idle, coalesced) so a reload or
+        // backgrounding resumes this move without a write inside the drop frame.
+        scheduleSaveGame(this.state);
         this.setInteractive(true);
     }
   }
@@ -739,9 +739,9 @@ export class App {
       confirmLabel: 'Leave',
       cancelLabel: 'Keep playing',
       onConfirm: () => {
-        // Ensure the very latest state is saved, then go home (do NOT clear —
-        // the game remains resumable).
-        saveGame(this.state);
+        // Flush the pending deferred save so the latest state is persisted, then go
+        // home (do NOT clear — the game remains resumable).
+        flushSaveGame();
         this.goHome();
       },
       onCancel: () => this.resumeGame(),

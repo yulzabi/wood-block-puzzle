@@ -15,6 +15,8 @@ import {
   levelResult,
   nextLevelToPlay,
   saveGame,
+  scheduleSaveGame,
+  flushSaveGame,
   loadEndlessSave,
   loadLevelsSave,
   hasEndlessSave,
@@ -553,6 +555,52 @@ describe('game save/restore (keyed by mode)', () => {
     expect(() => saveGame(richState())).not.toThrow();
     expect(() => clearLevelsSave()).not.toThrow();
     expect(loadLevelsSave()).toBeNull();
+  });
+});
+
+describe('deferred save (idle-coalesced)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('scheduleSaveGame defers the write; flushSaveGame performs it', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveGame(richEndlessState());
+    expect(raw.setItem).not.toHaveBeenCalled(); // nothing written inside the caller's frame
+    flushSaveGame();
+    expect(raw.setItem).toHaveBeenCalled();
+    expect(loadEndlessSave()).not.toBeNull();
+  });
+
+  it('coalesces rapid schedules into a single write of the latest state', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveGame(richEndlessState());
+    scheduleSaveGame({ ...richEndlessState(), score: 999 });
+    expect(raw.setItem).not.toHaveBeenCalled();
+    flushSaveGame();
+    expect(raw.setItem).toHaveBeenCalledTimes(1);
+    expect(loadEndlessSave()?.score).toBe(999);
+  });
+
+  it('a terminal clear cancels a pending deferred save (no resurrection)', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    scheduleSaveGame(richEndlessState());
+    clearEndlessSave(); // terminal transition — must drop the queued write
+    flushSaveGame(); // nothing pending now → no write
+    expect(loadEndlessSave()).toBeNull();
+  });
+
+  it('clear*Save writes synchronously (immediate removeItem)', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richEndlessState());
+    raw.removeItem.mockClear();
+    clearEndlessSave();
+    expect(raw.removeItem).toHaveBeenCalled();
+    expect(loadEndlessSave()).toBeNull();
   });
 });
 

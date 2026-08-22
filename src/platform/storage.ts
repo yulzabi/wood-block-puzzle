@@ -483,10 +483,60 @@ export function hasLevelsSave(): boolean {
 
 /** Remove the Endless save. Silent no-op on failure. */
 export function clearEndlessSave(): void {
+  cancelPendingSave(); // a pending deferred write must not resurrect a cleared save
   removeKey(SAVE_ENDLESS_KEY);
 }
 
 /** Remove the Levels save. Silent no-op on failure. */
 export function clearLevelsSave(): void {
+  cancelPendingSave();
   removeKey(SAVE_LEVELS_KEY);
+}
+
+// --- Deferred (idle-time) per-move save ---
+// Serializing GameState to localStorage is synchronous disk I/O; doing it inside
+// the placement frame costs a few ms on old hardware. Defer the per-move write to
+// idle and coalesce rapid moves into one write. Backgrounding flushes synchronously
+// (nothing lost on close); terminal clears cancel any pending write.
+
+let pendingSave: GameState | null = null;
+let saveHandle: number | null = null;
+
+function cancelPendingSave(): void {
+  if (saveHandle !== null) {
+    if (typeof cancelIdleCallback === 'function') cancelIdleCallback(saveHandle);
+    else clearTimeout(saveHandle);
+    saveHandle = null;
+  }
+  pendingSave = null;
+}
+
+/**
+ * Schedule a coalesced, off-the-hot-path save of `state` at idle time (falling
+ * back to a 0ms timeout where requestIdleCallback is unavailable — e.g. older
+ * iOS). Rapid calls collapse to one write of the latest state. Flush on
+ * backgrounding (flushSaveGame) guarantees a reload right after a move still
+ * restores.
+ */
+export function scheduleSaveGame(state: GameState): void {
+  pendingSave = state;
+  if (saveHandle !== null) return; // already scheduled — coalesce
+  const run = (): void => {
+    saveHandle = null;
+    const s = pendingSave;
+    pendingSave = null;
+    if (s) saveGame(s);
+  };
+  saveHandle =
+    typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(run)
+      : (setTimeout(run, 0) as unknown as number);
+}
+
+/** Write any pending deferred save synchronously (call on visibilitychange/pagehide). */
+export function flushSaveGame(): void {
+  if (pendingSave === null) return;
+  const s = pendingSave;
+  cancelPendingSave();
+  saveGame(s);
 }
