@@ -194,8 +194,30 @@ half-restore. 220 green. Storage-only.**
 - [x] **P7 CORE (1d8e960) — streak grace + ×5 cap.** `streakMultiplier` capped ×5; `streakGraceUsed`
   on GameState (clear refills / hold-once-at-streak≥2 / else reset), threaded through constructors;
   combo event gains `graceReady`; save schema bumped 1→2 (v1 saves → null). Core-only, 230 green.
-- [ ] **THEN serialize spine (both edit app.ts/hud.ts):** Perf Tier 2 (calm drop frame) and P7
-  HUD-wiring — one after the other, not concurrent.
+- [ ] **THEN serialize spine (both edit app.ts/hud.ts/game.css) — REORDERED by PE device data
+  (2026-08-22):** the drag lag is NOT the ghost/gems — it's **board-cell repaint churn** (off-board
+  drag = 60fps, over-board = <20fps, identical in Endless & Levels). New order:
+  1. **Tier 3 (paint diet) FIRST — the drag fix** (coding agent, spec ready): flat `.cell.filled`/
+     `.block` under `@media (pointer: coarse)` (main win); inset-only `.cell.line-hint` (drop the
+     `0 0 9px` outer glow that bleeds damage rects); de-filter `.gem` markers. Preserve colorblind
+     shape cue + gem letter toggle + reduced-motion. **Gate: owner `?perf=1` iPad re-check (drag
+     <20→~60fps) + owner look-eyeball (flat mobile blocks must still read as wood).** Plan B if not
+     enough: preview/line-hint on a dedicated overlay layer so cells never repaint during a drag.
+     → **[x] CODE DONE (15d0539):** all 3 changes verified game.css-only, a11y cues (preview shape +
+     gem letter) intact, 230 green. **PENDING owner iPad `?perf=1` re-check (drag ~60fps?) + look-eyeball
+     on flat mobile blocks.** If FPS still <60, escalate to Plan B (overlay layer).
+  2. **Tier 2 (drop/clear frame)** — diff renderBoard, single tray render, staggered decorations,
+     audio pre-warm, AND **fold in the newly-found `saveGame(state)` writing full state to
+     localStorage on EVERY move** (`app.ts`, added by P5 resume after the audit — idle-defer it).
+     Includes the no-op-render unit guard.
+  3. **P7 HUD wiring** last (badge + grace shield + combo `graceReady` + debounced aria-live).
+- [ ] **⚠ DESIGNER-INTERSECTION NOTE (for the future UX/UI pass):** Tier 3 introduces a deliberate
+  **desktop-rich / mobile-flat block styling split for PERFORMANCE** (old-iPad 16ms paint budget).
+  The designer must NOT "restore" the expensive wood gradient on touch devices without understanding
+  the frame-budget reason. Tune the flat mobile style for looks, don't delete the media-query split.
+- [ ] **Probe artifact (not a leak) — PE-confirmed:** the `?perf=1` listener counter climbs because
+  `once:true` listeners (pop-up `animationend`/`transitionend`) auto-remove without calling
+  `removeEventListener`. Optional later: count only non-`once` listeners. Real memory is flat.
 
 - [ ] **Bleeding-edge major pins** (TS 7 / Vite 8 / Lighthouse 13 / Vitest 4) — watch only.
   Re-run `npm run lighthouse` after any dep bump; the SW-precache reader and the LH

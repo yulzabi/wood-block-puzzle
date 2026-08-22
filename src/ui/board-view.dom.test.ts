@@ -17,6 +17,8 @@ describe('BoardView (DOM)', () => {
 
   const cells = (): HTMLElement[] =>
     Array.from(container.querySelectorAll<HTMLElement>('.cell'));
+  const hcells = (): HTMLElement[] =>
+    Array.from(container.querySelectorAll<HTMLElement>('.hcell'));
 
   it('builds an 8x8 grid of ARIA gridcells', () => {
     expect(cells().length).toBe(BOARD_SIZE * BOARD_SIZE);
@@ -111,7 +113,7 @@ describe('BoardView (DOM)', () => {
     expect(c0.style.getPropertyValue('--block')).toBe('');
   });
 
-  it('showPreview toggles valid/invalid classes; clearPreview removes them', () => {
+  it('showPreview toggles valid/invalid classes on the overlay; clearPreview removes them', () => {
     view.showPreview(
       [
         { row: 0, col: 0 },
@@ -119,17 +121,35 @@ describe('BoardView (DOM)', () => {
       ],
       true,
     );
-    expect(cells()[0]!.classList.contains('preview')).toBe(true);
-    expect(cells()[0]!.classList.contains('preview--valid')).toBe(true);
-    expect(cells()[1]!.classList.contains('preview--valid')).toBe(true);
+    const h = hcells();
+    expect(h[0]!.classList.contains('preview')).toBe(true);
+    expect(h[0]!.classList.contains('preview--valid')).toBe(true);
+    expect(h[1]!.classList.contains('preview--valid')).toBe(true);
+    // The board cell itself is never touched.
+    expect(cells()[0]!.classList.contains('preview')).toBe(false);
 
     view.clearPreview();
-    expect(cells()[0]!.classList.contains('preview')).toBe(false);
-    expect(cells()[0]!.classList.contains('preview--valid')).toBe(false);
+    expect(h[0]!.classList.contains('preview')).toBe(false);
+    expect(h[0]!.classList.contains('preview--valid')).toBe(false);
 
     // idx(1,0) === BOARD_SIZE
     view.showPreview([{ row: 1, col: 0 }], false);
-    expect(cells()[BOARD_SIZE]!.classList.contains('preview--invalid')).toBe(true);
+    expect(hcells()[BOARD_SIZE]!.classList.contains('preview--invalid')).toBe(true);
+  });
+
+  it('preview + line-hint never mutate the board cells (board layer stays clean during a drag)', () => {
+    const board = createBoard();
+    board[0] = 3; // a filled cell, so cells carry meaningful classes
+    view.renderBoard(board);
+    const before = cells().map((c) => c.className);
+
+    view.showPreview([{ row: 0, col: 0 }, { row: 2, col: 3 }], true);
+    view.showLineHint([0], [7]);
+    view.clearPreview();
+    view.clearLineHint();
+
+    // Highlights live on the overlay; the board cells' classes are untouched.
+    expect(cells().map((c) => c.className)).toEqual(before);
   });
 
   it('caches grid metrics (zero per-move layout reads) and re-measures after invalidateMetrics', () => {
@@ -154,16 +174,16 @@ describe('BoardView (DOM)', () => {
     }
   });
 
-  it('showLineHint glows every cell of the given rows/cols; clearLineHint removes it', () => {
+  it('showLineHint rings every overlay cell of the given rows/cols; clearLineHint removes it', () => {
     view.showLineHint([0], [0]);
-    const cs = cells();
+    const h = hcells();
     for (let col = 0; col < BOARD_SIZE; col++) {
-      expect(cs[col]!.classList.contains('line-hint')).toBe(true); // row 0
+      expect(h[col]!.classList.contains('line-hint')).toBe(true); // row 0
     }
     for (let row = 0; row < BOARD_SIZE; row++) {
-      expect(cs[row * BOARD_SIZE]!.classList.contains('line-hint')).toBe(true); // col 0
+      expect(h[row * BOARD_SIZE]!.classList.contains('line-hint')).toBe(true); // col 0
     }
     view.clearLineHint();
-    expect(cs.some((c) => c.classList.contains('line-hint'))).toBe(false);
+    expect(h.some((c) => c.classList.contains('line-hint'))).toBe(false);
   });
 });

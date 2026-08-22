@@ -141,6 +141,29 @@ mechanics (streak-freeze, post-loss anti-frustration nudge).
 
 ---
 
+### P12 — Settings: "Erase all data" (data management)  **[small; engineering; do anytime]**
+
+*Owner-raised (2026-08-22). Verdict: NEEDED, not redundant — the game now persists ~8 local
+keys (high score, level progress, per-level results, settings, stats, seen-intro, two resume
+slots, + upcoming daily-streak) with no user-facing reset. It's also the honest complement to the
+"all data local, no tracking" positioning: "your data, on your device, erasable anytime."*
+
+- **Distinct from existing controls:** resume "Start over"/"New" clears only the current game
+  slot; there is no reset for progress/stats/settings. This fills a real gap (shared device,
+  replay-from-scratch, corrupt-state recovery, QA).
+- **Scope: ALL-in-one** (recommended over granular). One "Erase all data" clears every `wbp.v1.*`
+  key and returns to a fresh first-run state (intro re-shows). Granular resets = overkill here.
+- **Location:** bottom of the Settings panel, visually separated as a "danger zone."
+- **Confirmation REQUIRED** — the one deliberate exception to the game's one-tap rule, because it's
+  destructive + irreversible. Reuse the confirm overlay: "Erase all data? Your high score, level
+  progress, stats, and saved games will be permanently deleted. This can't be undone."
+- **After clearing:** reset in-memory state to fresh-install + re-render home (no app restart needed).
+- **Implementation:** a `clearAllData()` in `storage.ts` that removes all `wbp.v1.*` keys (centralize
+  the key list); never-throw. Real labeled `<button>`; a11y. Test: clears every key; confirm-gated.
+- Isolated to `storage.ts` / `screens.ts` (settings panel) / `app.ts` (reset + re-render).
+
+---
+
 ## 9. Proposed backlog items (P8–P11) — sequenced after the perf + P7 track
 
 ### P8 — Fairness & trust  **[do FIRST of these — engineering, highest leverage, not designer-dependent]**

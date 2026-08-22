@@ -228,4 +228,35 @@ largely defends these already; this tier turns "looks right" into "proven right"
 
 | Date | Slice | Device | Before | After |
 | ---- | ----- | ------ | ------ | ----- |
-| — | — | — | — | — |
+| 2026-08-22 | Probe baseline, measured AFTER Tier 1 (ghost de-filter, `578bc58`) + Tier 4.1 (precache diet, `539af18`) | old iPad | — | idle **60 fps** · drag sweep **< 20 fps** · line clear **~35 fps** · after 2 min: 215 nodes / 46 listeners (healthy absolutes; trend TBD) |
+| 2026-08-22 | Tier 3 paint diet (`15d0539`: coarse-pointer flat blocks, inset-only line-hint, de-filtered gems) | old iPad | drag < 20 fps | drag **25–35 fps**, dips to **18** on very fast sweeps — improved but **below the 40 fps escalation line → plan B**. **REGRESSION (owner-reported):** full-line highlight invisible on touch — the coarse `@media` `.cell.filled` override (game.css:305) sits later than `.cell.line-hint` (261) and `.cell.preview--*` (212) at equal specificity, so filled cells lose the hint ring and the invalid-preview tint on coarse pointers. Hotfix: split the media overrides to sit directly after each base rule. Plan B removes the fragility permanently (highlights leave the cells). |
+
+**2026-08-22 reading.** Tier 1 alone did not fix the drag: the ghost is
+compositor-pure, so the remaining per-frame cost is **board-cell repaint churn**
+— each cell-boundary crossing toggles ≤ 10 preview cells + up to 24 line-hint
+cells, each repainting at gradient + 2×`color-mix` + triple-shadow cost; the
+line-hint's outer glow (`0 0 9px`) bleeds past cell bounds and inflates damage
+rects; and gem cells add an SVG repainted through `filter: drop-shadow`
+(`game.css` `.gem`) — a second filter on the drag path, found after the plan was
+written. Line-clear 35 fps is the Tier 2 drop-frame work, now bigger than
+planned: `saveGame(state)` serializes the full game state to localStorage on
+**every move** (`app.ts`), added by the resume feature after the audit — fold it
+into Tier 2.3's idle-deferred persistence.
+
+**2026-08-22 discriminating test (old iPad): diagnosis CONFIRMED.** Off-board
+drag (ghost moving every frame, zero highlight churn) holds **60 fps**; over the
+board it collapses to < 20 — **identically in Endless and Levels**. Conclusions:
+(a) the entire remaining drag lag is preview/line-hint repaint churn on the
+heavy wood-cell styles; (b) gems are NOT the dominant cost (Endless has none) —
+de-filter them anyway, but the win must come from the cell paint diet + the
+inset-only line-hint. Next slice = Tier 3, in that shape. Plan B if the diet
+isn't enough: move preview/line-hint highlights to a dedicated overlay layer so
+board cells never repaint during a drag.
+
+**Probe caveat (baseline 157 nodes / 23 listeners → 215 / 46 after 2 min):**
+the listener counter is net add/remove calls. `once: true` listeners (score/
+combo pop-ups' `animationend`, spring-back `transitionend`) are auto-removed by
+the browser without calling `removeEventListener`, so the counter increments
+forever by ~1 per pop-up — **counter artifact, not a leak**. Node count includes
+transient pop-ups/tray rebuilds; +58 over 2 min of play is consistent with that.
+Optional probe fix later: count only non-`once` listeners.

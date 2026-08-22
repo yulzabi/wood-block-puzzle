@@ -47,6 +47,13 @@ export function pointToCell(m: GridMetrics, x: number, y: number): Coord | null 
 export class BoardView {
   readonly el: HTMLElement;
   private readonly cells: HTMLElement[] = [];
+  /**
+   * Highlight overlay cells, mirroring `cells` 1:1 on a separate composited layer.
+   * Preview + line-hint classes live here so toggling them during a drag never
+   * invalidates the board's (expensive) fill/gem texture — the board layer does
+   * zero paint work mid-drag.
+   */
+  private readonly hcells: HTMLElement[] = [];
   private previewed: HTMLElement[] = [];
   /** Cells currently glowing with the line-completion hint. */
   private lineHinted: HTMLElement[] = [];
@@ -74,6 +81,21 @@ export class BoardView {
       this.cells.push(cell);
       this.el.append(cell);
     }
+
+    // Highlight overlay: its own composited layer mirroring the grid. Preview and
+    // line-hint highlights are drawn here (over the cells), so their churn during a
+    // drag repaints this cheap, mostly-transparent layer — never the board texture.
+    const overlay = document.createElement('div');
+    overlay.className = 'board-hl';
+    overlay.setAttribute('aria-hidden', 'true');
+    for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+      const hcell = document.createElement('div');
+      hcell.className = 'hcell';
+      this.hcells.push(hcell);
+      overlay.append(hcell);
+    }
+    this.el.append(overlay);
+
     container.append(this.el);
 
     // Grid geometry is stable between layout changes, so cache it and only
@@ -147,10 +169,10 @@ export class BoardView {
     const cls = valid ? 'preview--valid' : 'preview--invalid';
     for (const { row, col } of cells) {
       if (!inBounds(row, col)) continue;
-      const cell = this.cells[idx(row, col)];
-      if (!cell) continue;
-      cell.classList.add('preview', cls);
-      this.previewed.push(cell);
+      const hcell = this.hcells[idx(row, col)]; // overlay layer, not the board cell
+      if (!hcell) continue;
+      hcell.classList.add('preview', cls);
+      this.previewed.push(hcell);
     }
   }
 
@@ -165,10 +187,10 @@ export class BoardView {
   showLineHint(rows: readonly number[], cols: readonly number[]): void {
     this.clearLineHint();
     const mark = (i: number): void => {
-      const cell = this.cells[i];
-      if (!cell) return;
-      cell.classList.add('line-hint');
-      this.lineHinted.push(cell);
+      const hcell = this.hcells[i]; // overlay layer, not the board cell
+      if (!hcell) return;
+      hcell.classList.add('line-hint');
+      this.lineHinted.push(hcell);
     };
     for (const row of rows) for (let col = 0; col < BOARD_SIZE; col++) mark(idx(row, col));
     for (const col of cols) for (let row = 0; row < BOARD_SIZE; row++) mark(idx(row, col));
