@@ -1,6 +1,6 @@
 # 0001 — High-score-only persistence
 
-**Status:** Accepted
+**Status:** Accepted — the meta-persistence stands, but the "in-progress game is NOT persisted" clause is superseded by [0006](0006-resume-in-progress-game.md).
 
 ## Context
 
@@ -14,4 +14,4 @@ Persist only lightweight meta in `localStorage` (versioned keys): the high score
 
 - Minimal, trivially-testable persisted state; no serialization of the `Uint8Array` board.
 - A reload (including a service-worker update) discards the current game — an accepted trade-off, mitigated by prompt-based SW updates ([0004](0004-prompt-service-worker-updates.md)) and the in-game quit-confirm.
-- Adding "resume in-progress game" (backlog item **G-RESUME**) would revisit this ADR and requires serializing `GameState` (board/targets need `Array.from` round-trips) — supersede this record if implemented.
+- Adding "resume in-progress game" (backlog item **G-RESUME**) would revisit this ADR and requires serializing `GameState` (board/gems need `Array.from` round-trips). **Implemented — see [0006](0006-resume-in-progress-game.md), which supersedes this clause.**
