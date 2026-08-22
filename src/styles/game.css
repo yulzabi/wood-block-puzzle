@@ -305,8 +305,14 @@
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
   gap: var(--board-gap);
   pointer-events: none;
-  will-change: transform; /* promote to its own layer */
-  contain: strict;
+  /* Layer promotion via a real transform, NOT will-change: iOS WebKit drew the
+     will-change-promoted layer offset from its layout position (rings sat high
+     of the bricks on iPad only; layout measured 0px off — see perf plan §7,
+     2026-08-22). Size containment removed for the same reason: the box is
+     inset-sized, so `layout paint` gives the same isolation minus the combo
+     that triggered the misplacement. */
+  transform: translateZ(0);
+  contain: layout paint;
 }
 .hcell {
   position: relative;

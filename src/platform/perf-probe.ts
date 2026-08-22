@@ -72,6 +72,29 @@ export function startPerfProbe(): void {
     longtaskSupported = false;
   }
 
+  // hlΔ: measured offset (px) of the highlight overlay grid vs the board grid,
+  // sampled at cells 0 and 63. This is LAYOUT truth read on the device: if the
+  // hint rings LOOK offset while hlΔ reads ~0, layout agrees and the compositor
+  // is misplacing the overlay layer (the iPad-only bug, perf plan §7). Costs
+  // four rect reads per overlay refresh (~2×/s) — probe-only, never in play.
+  let sample: { c0: Element; c63: Element; h0: Element; h63: Element } | null = null;
+  const hlDelta = (): string => {
+    if (!sample || !sample.c0.isConnected || !sample.h0.isConnected) {
+      sample = null;
+      const cs = document.querySelectorAll('.board .cell');
+      const hs = document.querySelectorAll('.board-hl .hcell');
+      if (cs.length < 64 || hs.length < 64) return 'n/a';
+      sample = { c0: cs[0]!, c63: cs[63]!, h0: hs[0]!, h63: hs[63]! };
+    }
+    const d = (cell: Element, hcell: Element): string => {
+      const a = cell.getBoundingClientRect();
+      const b = hcell.getBoundingClientRect();
+      if (a.width === 0) return 'hidden';
+      return `${(b.left - a.left).toFixed(1)},${(b.top - a.top).toFixed(1)}`;
+    };
+    return `0:(${d(sample.c0, sample.h0)}) 63:(${d(sample.c63, sample.h63)})`;
+  };
+
   const box = document.createElement('div');
   box.setAttribute('aria-hidden', 'true');
   Object.assign(box.style, {
@@ -107,7 +130,8 @@ export function startPerfProbe(): void {
         `fps ${fps}\n` +
         `long ${longText}\n` +
         `nodes ${document.getElementsByTagName('*').length}\n` +
-        `listeners ${listeners}`;
+        `listeners ${listeners}\n` +
+        `hlΔ ${hlDelta()}`;
     }
     requestAnimationFrame(tick);
   };
