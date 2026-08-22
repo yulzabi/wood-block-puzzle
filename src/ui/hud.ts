@@ -27,6 +27,10 @@ export class HUD {
   private readonly gemsRow: HTMLElement;
   private readonly gemLevelEl: HTMLElement;
   private readonly gemChipsEl: HTMLElement;
+  // Standing streak badge (multiplier + grace shield) — both modes, streak ≥ 2.
+  private readonly streakBadge: HTMLElement;
+  private readonly streakMultEl: HTMLElement;
+  private readonly streakShieldEl: HTMLElement;
   private displayed = 0;
   private raf = 0;
   private startTs = 0;
@@ -58,7 +62,37 @@ export class HUD {
     this.gemChipsEl.className = 'gem-chips';
     this.gemsRow.append(this.gemChipsEl);
 
-    this.el.append(this.endlessRow, this.levelsRow, this.gemsRow);
+    // --- Streak badge (standing state; the transient combo-pop is separate) ---
+    this.streakBadge = document.createElement('div');
+    this.streakBadge.className = 'streak-badge';
+    this.streakBadge.hidden = true;
+    this.streakBadge.setAttribute('aria-hidden', 'true'); // streak is announced via aria-live
+    this.streakMultEl = document.createElement('span');
+    this.streakMultEl.className = 'streak-badge__mult';
+    this.streakShieldEl = document.createElement('span');
+    this.streakShieldEl.className = 'streak-badge__shield';
+    this.streakBadge.append(this.streakMultEl, this.streakShieldEl);
+
+    this.el.append(this.endlessRow, this.levelsRow, this.gemsRow, this.streakBadge);
+  }
+
+  /**
+   * Standing streak badge: shown at streak ≥ 2 with the current ×multiplier
+   * (numeric — never color-only), warming with the multiplier. The grace shield
+   * shows when a forgiven miss is still available and reads as "spent" (shape +
+   * dim) once used. Hidden below streak 2.
+   */
+  renderStreak(streak: number, multiplier: number, graceReady: boolean): void {
+    if (streak < 2) {
+      this.streakBadge.hidden = true;
+      return;
+    }
+    this.streakBadge.hidden = false;
+    this.streakMultEl.textContent = `×${formatMultiplier(multiplier)}`;
+    // Warmth 0..1 across the multiplier range (1.5 → 5), drives color intensity.
+    const warm = Math.min(1, Math.max(0, (multiplier - 1.5) / (5 - 1.5)));
+    this.streakBadge.style.setProperty('--warm', warm.toFixed(2));
+    this.streakShieldEl.classList.toggle('streak-badge__shield--spent', !graceReady);
   }
 
   /** Endless HUD: score (tweened) + persisted best. */

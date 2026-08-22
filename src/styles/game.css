@@ -35,6 +35,64 @@
 /* ---- HUD ---- */
 .hud {
   flex: 0 0 auto;
+  position: relative; /* positioning context for the streak badge */
+}
+
+/* ---- Streak badge (standing multiplier + grace shield) ---- */
+/* Pinned to the HUD's top-right corner. Shown only at streak ≥ 2 (JS toggles
+   [hidden]). The ×N is real text (never color-only); it warms hotter as --warm
+   climbs. The grace shield reads as "spent" by SHAPE (a slash) + dimming, so the
+   forgiven-miss state is legible without relying on color. */
+.streak-badge {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: #2a1206;
+  background: color-mix(in srgb, #ff5a1f calc(var(--warm, 0) * 100%), #ffcf6b);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: background 0.2s ease;
+}
+.streak-badge[hidden] {
+  display: none;
+}
+.streak-badge__mult {
+  font-size: 16px;
+}
+.streak-badge__shield {
+  position: relative;
+  font-size: 13px;
+  line-height: 1;
+}
+.streak-badge__shield::before {
+  content: '🛡';
+}
+/* Spent: dimmed AND slashed — the slash is a hue-independent shape cue. */
+.streak-badge__shield--spent {
+  opacity: 0.45;
+}
+.streak-badge__shield--spent::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 50%;
+  height: 2px;
+  background: #2a1206;
+  transform: rotate(-20deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streak-badge {
+    transition: none;
+  }
 }
 
 .hud-row {

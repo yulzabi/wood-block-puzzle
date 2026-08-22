@@ -53,4 +53,26 @@ describe('HUD (DOM)', () => {
     expect(blocksBox.hidden).toBe(false);
     expect(blocksBox.querySelector('.hud-value')?.textContent).toBe('3/8');
   });
+
+  it('renderStreak shows the multiplier badge only at streak >= 2, with a numeric ×N', () => {
+    const badge = (): HTMLElement => container.querySelector<HTMLElement>('.streak-badge')!;
+    hud.renderStreak(1, 1, true); // below 2 — not shown
+    expect(badge().hidden).toBe(true);
+
+    hud.renderStreak(3, 2, true);
+    expect(badge().hidden).toBe(false);
+    expect(badge().querySelector('.streak-badge__mult')?.textContent).toBe('×2'); // numeric, not color-only
+
+    hud.renderStreak(0, 1, false); // streak broke — badge gone
+    expect(badge().hidden).toBe(true);
+  });
+
+  it('renderStreak reflects the grace shield state (spent marked by shape, not hue alone)', () => {
+    const shield = (): HTMLElement => container.querySelector<HTMLElement>('.streak-badge__shield')!;
+    hud.renderStreak(4, 2.5, true); // grace ready
+    expect(shield().classList.contains('streak-badge__shield--spent')).toBe(false);
+
+    hud.renderStreak(4, 2.5, false); // grace spent
+    expect(shield().classList.contains('streak-badge__shield--spent')).toBe(true);
+  });
 });

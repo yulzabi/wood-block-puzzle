@@ -22,6 +22,7 @@ import {
 } from './core/game';
 import { canPlace, firstPlacement, linesCompletedBy } from './core/board';
 import { generateLevel } from './core/levels';
+import { streakMultiplier } from './core/scoring';
 import {
   loadHighScore,
   saveHighScore,
@@ -490,6 +491,13 @@ export class App {
         this.gemTotal(),
       );
     }
+    // Standing streak badge (both modes): multiplier for the current streak +
+    // grace-shield state. Reflects the live state, so it also restores on Continue.
+    this.hud.renderStreak(
+      this.state.streak,
+      streakMultiplier(this.state.streak),
+      !this.state.streakGraceUsed,
+    );
   }
 
   /** Per-color gems still to clear (quota − cleared, clamped at 0), by color. */
@@ -518,6 +526,9 @@ export class App {
   /** Apply a placement Move and reflect the resulting state + events in the UI. */
   private handlePlace(move: Move): void {
     if (this.state.status !== 'playing') return;
+    // Streak state BEFORE the move, to detect the transition for the announcement.
+    const prevStreak = this.state.streak;
+    const prevGrace = this.state.streakGraceUsed;
     const res = applyMove(this.state, move);
     if (!res.ok) return;
 
@@ -534,7 +545,6 @@ export class App {
     let placedAt: { x: number; y: number } | null = null;
     let clearedAt: { x: number; y: number } | null = null;
     let linesCleared = 0;
-    let combo: { streak: number; multiplier: number } | null = null;
     let gemsClearedThisMove: Record<number, number> | null = null;
 
     for (const ev of res.events) {
@@ -570,7 +580,6 @@ export class App {
           break;
         }
         case 'combo': {
-          combo = { streak: ev.streak, multiplier: ev.multiplier };
           if (ev.streak > this.stats.bestStreak) {
             this.stats = { ...this.stats, bestStreak: ev.streak };
           }
@@ -594,7 +603,11 @@ export class App {
     }
 
     this.renderHud();
-    this.announce(this.moveMessage(linesCleared, combo, gemsClearedThisMove));
+    // One aria-live write: the move message + any streak transition, composed so
+    // the streak phrase never clobbers the move announcement.
+    const moveMsg = this.moveMessage(linesCleared, gemsClearedThisMove);
+    const streakMsg = this.streakAnnounce(prevStreak, prevGrace);
+    this.announce(streakMsg ? `${moveMsg} ${streakMsg}` : moveMsg);
 
     // Persist accumulated stats (best score / lines / streak updated above).
     if (this.state.score > this.stats.bestScore) {
@@ -624,16 +637,12 @@ export class App {
   }
 
   /**
-   * Build the single aria-live message for a completed move. On gem levels it
-   * composes line + gem clears into one coherent write ("Cleared 2 lines and 3
-   * red. 11 red left.") rather than two competing announcements; on score/endless
-   * it reports lines + streak + score as before.
+   * Build the move-outcome aria-live message. On gem levels it composes line +
+   * gem clears into one coherent write; on score/endless it reports lines +
+   * score. The streak transition is appended separately by the caller (see
+   * streakAnnounce) so both compose into a single write.
    */
-  private moveMessage(
-    linesCleared: number,
-    combo: { streak: number; multiplier: number } | null,
-    gemsClearedThisMove: Record<number, number> | null,
-  ): string {
+  private moveMessage(linesCleared: number, gemsClearedThisMove: Record<number, number> | null): string {
     const lineText = `Cleared ${linesCleared} ${linesCleared === 1 ? 'line' : 'lines'}`;
 
     if (this.state.mode === 'levels' && this.state.goalType === 'gems') {
@@ -650,12 +659,22 @@ export class App {
     }
 
     if (linesCleared <= 0) return `Placed. Score ${this.state.score}.`;
-    let msg = `${lineText}.`;
-    if (combo && combo.streak >= 2) {
-      msg += ` Streak ${combo.streak}, ×${formatMultiplier(combo.multiplier)}.`;
-    }
-    msg += ` Score ${this.state.score}.`;
-    return msg;
+    return `${lineText}. Score ${this.state.score}.`;
+  }
+
+  /**
+   * A streak-transition phrase to compose into the move announcement — one write,
+   * so it never clobbers. Speaks only on a real transition (built to a higher
+   * multiplier, grace protected a miss, or the streak reset), which naturally
+   * debounces repeats.
+   */
+  private streakAnnounce(prevStreak: number, prevGrace: boolean): string {
+    const s = this.state.streak;
+    const graceUsed = this.state.streakGraceUsed;
+    if (s >= 2 && s > prevStreak) return `Streak ×${formatMultiplier(streakMultiplier(s))}.`;
+    if (s >= 2 && s === prevStreak && graceUsed && !prevGrace) return 'Streak protected.';
+    if (prevStreak >= 2 && s === 0) return 'Streak reset.';
+    return '';
   }
 
   /** Format a per-color count map as "3 red, 2 blue". */
