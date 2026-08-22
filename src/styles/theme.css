@@ -103,6 +103,17 @@ body {
     calc(var(--safe-left) + 12px);
 }
 
+/* Landscape on touch devices (e.g. an iPad rotated): the portrait phone-frame
+   becomes a full-width landscape stage so the in-game view can lay the board
+   beside a side panel (see .game-layout). Desktop windows (pointer: fine) keep
+   the centered portrait phone-frame unchanged. */
+@media (orientation: landscape) and (pointer: coarse) {
+  .app-frame {
+    width: 100%;
+    max-width: none;
+  }
+}
+
 /* Any grabbable game surface opts out of browser touch gestures. */
 .play-surface {
   touch-action: none;

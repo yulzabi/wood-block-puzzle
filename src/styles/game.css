@@ -12,6 +12,44 @@
   padding: 4px;
 }
 
+/* ---- Landscape (touch devices, e.g. an iPad rotated) ----
+   The portrait stack (top bar → HUD → board → tray) doesn't fit when the height
+   is the short side, so reflow into a grid: the board fills the left column,
+   sized to the available height; a right-hand side panel stacks the HUD (top),
+   tray (middle), and the menu bar (bottom). Scoped to pointer:coarse so desktop
+   landscape keeps the portrait phone-frame; portrait is untouched entirely. */
+@media (orientation: landscape) and (pointer: coarse) {
+  .game-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "board hud"
+      "board tray"
+      "board bar";
+    column-gap: 14px;
+    row-gap: 10px;
+  }
+  .board-wrap {
+    grid-area: board;
+  }
+  .hud {
+    grid-area: hud;
+  }
+  .tray {
+    grid-area: tray;
+    align-self: center; /* sit centered in the middle row rather than stretched */
+  }
+  .game-topbar {
+    grid-area: bar;
+  }
+  /* The board is now bounded by the (short-side) height, not the portrait stack. */
+  .board {
+    max-width: min(100%, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 44px));
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 44px);
+  }
+}
+
 /* ---- In-game top bar (back to menu) ---- */
 .game-topbar {
   flex: 0 0 auto;
