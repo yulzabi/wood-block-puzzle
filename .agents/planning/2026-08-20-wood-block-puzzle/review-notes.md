@@ -130,6 +130,31 @@ app.ts). Locked nodes = native `disabled` (not clickable/focusable). Replay rege
   - **Owner device gate:** Play Daily→run seeded by today; ←Menu→Home shows Resume Daily; game-over
     →daily-done w/ streak, Home only; **confirm normal Endless "Continue" still works after playing
     the daily** (cross-contamination check).
+
+**DESIGN PASS (P10/P11 + polish) — plan `2026-08-22-design-pass/plan.md` APPROVED (2026-08-22).**
+8 slices D1–D8, all approved (full pass). Owner + TPM decisions locked:
+- [x] **Flag #1 app.ts wiring — APPROVED.** Achievement detection / cosmetic application / coach-marks
+  wire through the spine (established HUD/daily/resume pattern); "no core changes" = no architecture
+  drift, not "never touch app.ts."
+- [x] **Flag #2 core/daily.ts `history` field (D7) — APPROVED by owner.** One-line pure add to
+  `recordDailyResult` + schema bump (back-compat), prune ~400 days. Enables the streak calendar.
+- [x] **Flag #3 FTUE generation tuning — DEFERRED.** D8 = presentation FTUE only; `core/levels.ts`
+  "guaranteed early clear" tuning is a SEPARATE later owner-approved core slice.
+- **HARD GATES (TPM, non-negotiable):**
+  - **D3 Clean-Sweep board flash:** if `?perf=1` shows ANY clear-frame regression on old iPad → CUT
+    the flash (gold burst carries the tier). Not a judgment call.
+  - **D5 cosmetics:** per-board-theme contrast re-verification of the colorblind cues (gem letter +
+    preview shape) — a dark theme must not kill legibility. Actual check, not assumption.
+  - **D1 flat-block 2nd inset + panel grain:** behind `?perf=1` gate; revert independently if it fails.
+    Gate RUN, not assumed-free.
+- **Sequencing:** D1 first (token foundation, ~0 visual diff). D4 before D5 (unlocks derive from
+  achievements). Per-slice: green+typecheck → owner device look-check → `?perf=1` for game surfaces →
+  one commit → stop for review (plan §10).
+- **Design invariants (perf/ethics-safe by construction):** cosmetics = CSS-variable swaps (no new
+  paint); unlocks derived from achievements (one source of truth); skill-gated only (no RNG/currency);
+  missed-day calendar cells neutral (no guilt).
+- Note: owner routed TPM feedback back to the UX/UI agent — plan doc may be revised; these decisions +
+  gates hold regardless of doc edits.
 **Status: DONE (P2a 5ab1892 `firstPlacement` core + `hasAnyPlacement` refactor to delegate;
 P2b aae0309 settings + in-game Hint button). Defaults OFF; per-field settings load is
 backward-compatible with legacy blobs; button absent from DOM when off; single-highlight
