@@ -14,7 +14,47 @@ import {
   saveLevelResult,
   levelResult,
   nextLevelToPlay,
+  saveGame,
+  loadGame,
+  clearSave,
 } from './storage';
+import type { GameState, Piece } from '../core/types';
+import { BOARD_SIZE } from '../core/types';
+import { SHAPES } from '../core/shapes';
+
+/** A rich in-progress gem-level state: non-empty typed arrays + gem-bearing pieces. */
+function richState(): GameState {
+  const board = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+  board[0] = 3;
+  board[9] = 2;
+  board[63] = 1;
+  const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+  gems[9] = 2;
+  gems[10] = 2;
+  const tray: Piece[] = [
+    { id: 'p-7', shape: SHAPES[0]!, material: 4, placed: false, gems: { 0: 2 } },
+    { id: 'p-8', shape: SHAPES[1]!, material: 5, placed: true },
+    { id: 'p-9', shape: SHAPES[2]!, material: 1, placed: false },
+  ];
+  return {
+    board,
+    tray,
+    score: 320,
+    highScore: 500,
+    status: 'playing',
+    rngState: 123456789,
+    pieceSeq: 10,
+    streak: 3,
+    mode: 'levels',
+    level: 4,
+    goalType: 'gems',
+    targetScore: 0,
+    gems,
+    quotas: { 2: 20 },
+    gemsCleared: { 2: 6 },
+    gemSupplyRemaining: { 2: 16 },
+  };
+}
 
 const KEY = 'wbp.v1.highscore';
 const LEVEL_KEY = 'wbp.v1.level';
@@ -348,6 +388,85 @@ describe('level results', () => {
       completed: true,
       bestScore: 42,
     });
+  });
+});
+
+describe('game save/restore', () => {
+  const SAVE_KEY = 'wbp.v1.save';
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips a rich playing state with typed arrays + per-piece gems', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    const state = richState();
+    saveGame(state);
+    const loaded = loadGame();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded).toEqual(state); // deep-equal to the original
+    // board/gems restored as real Uint8Arrays, not plain arrays.
+    expect(loaded!.board).toBeInstanceOf(Uint8Array);
+    expect(loaded!.gems).toBeInstanceOf(Uint8Array);
+    expect(Array.from(loaded!.board)).toEqual(Array.from(state.board));
+    // per-piece gems preserved.
+    expect(loaded!.tray[0]?.gems).toEqual({ 0: 2 });
+    expect(loaded!.tray[1]?.gems).toBeUndefined();
+  });
+
+  it('returns null when the key is missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadGame()).toBeNull();
+  });
+
+  it('returns null (without throwing) on a corrupt blob', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(SAVE_KEY, '{not json');
+    expect(() => loadGame()).not.toThrow();
+    expect(loadGame()).toBeNull();
+  });
+
+  it('returns null on a schema-version mismatch', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(SAVE_KEY, JSON.stringify({ v: 999, state: {} }));
+    expect(loadGame()).toBeNull();
+  });
+
+  it('returns null on a partial / garbage state and never half-restores', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    // Right version but almost everything missing.
+    map.set(SAVE_KEY, JSON.stringify({ v: 1, state: { score: 10 } }));
+    expect(loadGame()).toBeNull();
+    // Valid in every way except the board is the wrong length.
+    const tampered = JSON.parse(
+      JSON.stringify({
+        v: 1,
+        state: { ...richState(), board: Array.from(richState().board), gems: Array.from(richState().gems) },
+      }),
+    );
+    tampered.state.board = [1, 2, 3];
+    map.set(SAVE_KEY, JSON.stringify(tampered));
+    expect(loadGame()).toBeNull();
+  });
+
+  it('clearSave removes the save (subsequent load -> null)', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richState());
+    expect(loadGame()).not.toBeNull();
+    clearSave();
+    expect(loadGame()).toBeNull();
+  });
+
+  it('save/clear are no-ops without throwing when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => saveGame(richState())).not.toThrow();
+    expect(() => clearSave()).not.toThrow();
+    expect(loadGame()).toBeNull();
   });
 });
 

@@ -4,12 +4,16 @@
  * corrupt. Only the high score is persisted (per the design's persistence scope).
  */
 
+import type { GameState, GameMode, GameStatus, GoalType, Piece } from '../core/types';
+import { BOARD_SIZE } from '../core/types';
+
 const HIGH_SCORE_KEY = 'wbp.v1.highscore';
 const LEVEL_KEY = 'wbp.v1.level';
 const SETTINGS_KEY = 'wbp.v1.settings';
 const STATS_KEY = 'wbp.v1.stats';
 const SEEN_INTRO_KEY = 'wbp.v1.seenIntro';
 const LEVEL_RESULTS_KEY = 'wbp.v1.levelResults';
+const SAVE_KEY = 'wbp.v1.save';
 
 /** Return the localStorage instance, or null if it is unavailable in this context. */
 function getStorage(): Storage | null {
@@ -291,5 +295,147 @@ export function saveSeenIntro(seen = true): void {
     storage.setItem(SEEN_INTRO_KEY, seen ? '1' : '0');
   } catch {
     // Quota exceeded / disabled — silently ignore.
+  }
+}
+
+// ---- In-progress game save/restore ----
+
+/** Schema version of the save blob; a mismatch on load discards the save. */
+const SAVE_SCHEMA = 1;
+const CELL_COUNT = BOARD_SIZE * BOARD_SIZE;
+
+const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+const isCounts = (x: unknown): boolean =>
+  typeof x === 'object' &&
+  x !== null &&
+  !Array.isArray(x) &&
+  Object.values(x as Record<string, unknown>).every(
+    (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0,
+  );
+/** A length-CELL_COUNT array of 0..255 (a serialized Uint8Array board/gems channel). */
+const isByteArray = (x: unknown): x is number[] =>
+  Array.isArray(x) &&
+  x.length === CELL_COUNT &&
+  x.every((v) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 255);
+
+const SAVE_STATUSES = new Set(['home', 'playing', 'gameover', 'levelcomplete', 'levelfailed']);
+const SAVE_MODES = new Set(['endless', 'levels']);
+const SAVE_GOALS = new Set(['gems', 'score']);
+
+/** Validate a serialized tray piece (shape + material + placement + optional gems). */
+function isValidPiece(x: unknown): boolean {
+  if (typeof x !== 'object' || x === null) return false;
+  const p = x as Record<string, unknown>;
+  if (typeof p['id'] !== 'string' || !isNum(p['material']) || typeof p['placed'] !== 'boolean') return false;
+  const shape = p['shape'];
+  if (typeof shape !== 'object' || shape === null) return false;
+  const sh = shape as Record<string, unknown>;
+  if (typeof sh['id'] !== 'string' || !isNum(sh['size']) || !isNum(sh['width']) || !isNum(sh['height'])) {
+    return false;
+  }
+  const cells = sh['cells'];
+  if (
+    !Array.isArray(cells) ||
+    !cells.every((c) => {
+      if (typeof c !== 'object' || c === null) return false;
+      const co = c as Record<string, unknown>;
+      return isNum(co['row']) && isNum(co['col']);
+    })
+  ) {
+    return false;
+  }
+  if (p['gems'] !== undefined && !isCounts(p['gems'])) return false;
+  return true;
+}
+
+/**
+ * Persist the full in-progress game so it can resume after reload/backgrounding.
+ * Uint8Array channels (board, gems) are stored as plain number arrays (JSON can't
+ * carry typed arrays); everything else is JSON-safe. Silent no-op on failure.
+ */
+export function saveGame(state: GameState): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    const blob = {
+      v: SAVE_SCHEMA,
+      state: { ...state, board: Array.from(state.board), gems: Array.from(state.gems) },
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(blob));
+  } catch {
+    // Quota exceeded / disabled — silently ignore.
+  }
+}
+
+/**
+ * Load a saved in-progress game, or null if there is none, the schema version
+ * mismatches, or the blob is corrupt / missing any required field. Never throws
+ * and never half-restores. `rngState` is restored verbatim (no re-seed) so the
+ * piece sequence continues exactly where it left off.
+ */
+export function loadGame(): GameState | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(SAVE_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const blob = parsed as Record<string, unknown>;
+    if (blob['v'] !== SAVE_SCHEMA) return null;
+    if (typeof blob['state'] !== 'object' || blob['state'] === null) return null;
+    const o = blob['state'] as Record<string, unknown>;
+
+    if (!isByteArray(o['board']) || !isByteArray(o['gems'])) return null;
+    if (!Array.isArray(o['tray']) || !o['tray'].every(isValidPiece)) return null;
+    if (
+      !isNum(o['score']) ||
+      !isNum(o['highScore']) ||
+      !isNum(o['rngState']) ||
+      !isNum(o['pieceSeq']) ||
+      !isNum(o['streak']) ||
+      !isNum(o['level']) ||
+      !isNum(o['targetScore'])
+    ) {
+      return null;
+    }
+    if (typeof o['status'] !== 'string' || !SAVE_STATUSES.has(o['status'])) return null;
+    if (typeof o['mode'] !== 'string' || !SAVE_MODES.has(o['mode'])) return null;
+    if (typeof o['goalType'] !== 'string' || !SAVE_GOALS.has(o['goalType'])) return null;
+    if (!isCounts(o['quotas']) || !isCounts(o['gemsCleared']) || !isCounts(o['gemSupplyRemaining'])) {
+      return null;
+    }
+
+    return {
+      board: Uint8Array.from(o['board']),
+      gems: Uint8Array.from(o['gems']),
+      tray: o['tray'] as Piece[],
+      score: o['score'],
+      highScore: o['highScore'],
+      status: o['status'] as GameStatus,
+      rngState: o['rngState'],
+      pieceSeq: o['pieceSeq'],
+      streak: o['streak'],
+      mode: o['mode'] as GameMode,
+      level: o['level'],
+      goalType: o['goalType'] as GoalType,
+      targetScore: o['targetScore'],
+      quotas: o['quotas'] as Record<number, number>,
+      gemsCleared: o['gemsCleared'] as Record<number, number>,
+      gemSupplyRemaining: o['gemSupplyRemaining'] as Record<number, number>,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Remove any saved in-progress game. Silent no-op on failure. */
+export function clearSave(): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(SAVE_KEY);
+  } catch {
+    // ignore
   }
 }
