@@ -210,7 +210,22 @@ half-restore. 220 green. Storage-only.**
      audio pre-warm, AND **fold in the newly-found `saveGame(state)` writing full state to
      localStorage on EVERY move** (`app.ts`, added by P5 resume after the audit — idle-defer it).
      Includes the no-op-render unit guard.
+     → **[x] saveGame idle-defer DONE (fa3e1b0):** `scheduleSaveGame` (requestIdleCallback, coalesced)
+     replaces per-move sync write; flush on visibilitychange/pagehide/leave-to-menu; **terminal clears
+     `cancelPendingSave()` so a deferred write can't resurrect a cleared save.** No localStorage in the
+     placement task. Tests cover schedule/flush/coalesce/clear-cancels. The REST of Tier 2 (render diff/
+     stagger/audio pre-warm) = **only if the clear frame still hitches on device — measure first.**
   3. **P7 HUD wiring** last (badge + grace shield + combo `graceReady` + debounced aria-live).
+     → **[x] DONE (e4ac546):** standing multiplier badge (streak≥2, numeric ×N, warms; restores on
+     Continue) + grace shield that reads spent by SHAPE (slash) + dim; aria-live composed into the
+     move write (debounced, transition-only); render-assert tests. **PERF TRACK & P7 CODE-COMPLETE.**
+     Owner device gates pending: (a) no line-clear jank + resume-after-immediate-reload; (b) badge/
+     shield eyeball — makes "why didn't my streak reset?" obvious.
+- [x] **Streak badge overlap fix (7656250) — structural.** Badge was `position:absolute;right:0`
+  on `.hud`, landing on top of the BEST box on small layouts. Fixed by moving it to a dedicated
+  `.hud-streak-line` flow slot (24px reserved, no jump) above the score row; `.hud` is now a flex
+  column. Overlap now impossible at any width; both endless + levels HUD variants clear. 237 green.
+  **Owner: eyeball at narrow width — BEST readable, badge above it, no overlap.**
 - [ ] **⚠ DESIGNER-INTERSECTION NOTE (for the future UX/UI pass):** Tier 3 introduces a deliberate
   **desktop-rich / mobile-flat block styling split for PERFORMANCE** (old-iPad 16ms paint budget).
   The designer must NOT "restore" the expensive wood gradient on touch devices without understanding
