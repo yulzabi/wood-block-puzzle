@@ -59,6 +59,8 @@ export class BoardView {
   private lineHinted: HTMLElement[] = [];
   /** Gem color currently rendered on each cell (0 = none), for reconciliation. */
   private readonly cellGem = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+  /** Material currently rendered on each cell (0 = empty), for reconciliation. */
+  private readonly lastMaterials = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
   /** Whether gem markers show the opt-in colorblind letter cue. */
   private colorblindGems = false;
   /** Cached grid geometry; null = must re-measure. See metrics(). */
@@ -119,7 +121,10 @@ export class BoardView {
    * Reconcile every cell to empty or a wood-tone block by material index.
    * In Levels mode a `gems` channel (>0 = that cell's gem color) renders a
    * colored diamond marker on the cell (the objective to clear); endless passes
-   * nothing. Gem markers are reconciled so only changed cells rebuild.
+   * nothing. Fully diffed: a cell whose (material, gem) pair is unchanged is
+   * skipped entirely — no class/style/aria writes — so a typical move touches
+   * only its placed + cleared cells, not all 64 (drop-frame cost + VoiceOver
+   * churn; perf plan Tier 2).
    */
   renderBoard(board: Board, gems?: Uint8Array): void {
     for (let i = 0; i < this.cells.length; i++) {
@@ -127,6 +132,8 @@ export class BoardView {
       if (!cell) continue;
       const material = board[i] ?? 0;
       const gemColor = gems ? gems[i] ?? 0 : 0;
+      if (material === this.lastMaterials[i] && gemColor === this.cellGem[i]) continue;
+      this.lastMaterials[i] = material;
 
       // A gem cell shows its diamond as the cell's content (no wood-block fill),
       // so the gem reads clearly instead of a wood tile with a marker on it.

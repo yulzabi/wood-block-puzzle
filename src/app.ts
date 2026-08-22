@@ -604,6 +604,9 @@ export class App {
     this.setInteractive(false);
 
     // Reflect the new board/tray truth first, then animate the events.
+    // `res.state` is the FINAL post-move state (including any refill), so this
+    // single tray render already shows refilled pieces — the 'refill' event
+    // needs no second render.
     this.boardView.renderBoard(
       this.state.board,
       this.state.mode === 'levels' ? this.state.gems : undefined,
@@ -659,10 +662,8 @@ export class App {
           gemsClearedThisMove = ev.cleared;
           break;
         }
-        case 'refill': {
-          this.trayView.renderTray(this.state.tray);
-          break;
-        }
+        // 'refill' needs no handling: the up-front tray render above already
+        // drew the refilled tray (res.state is post-refill).
         // 'gameover' / 'levelcomplete' / 'levelfailed' handled after the loop
         // so the final board renders first.
         default:

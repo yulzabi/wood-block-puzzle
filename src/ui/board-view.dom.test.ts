@@ -102,6 +102,25 @@ describe('BoardView (DOM)', () => {
     expect(cells()[5]!.querySelector('.gem')).toBeNull();
   });
 
+  it('re-rendering an identical board performs zero DOM writes (drop-frame guard)', () => {
+    const board = createBoard();
+    const gems = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+    board[0] = 3;
+    board[9] = 5;
+    gems[9] = 2;
+    view.renderBoard(board, gems);
+
+    const classesBefore = cells().map((c) => c.className);
+    const spy = vi.spyOn(Element.prototype, 'setAttribute');
+    try {
+      view.renderBoard(board, gems);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(cells().map((c) => c.className)).toEqual(classesBefore);
+  });
+
   it('reconciles: a previously-filled cell clears on the next render', () => {
     const board = createBoard();
     board[0] = 4;
