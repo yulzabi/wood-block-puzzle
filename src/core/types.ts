@@ -80,6 +80,7 @@ export interface GameState {
   readonly rngState: number; // current PRNG state (seedable/deterministic)
   readonly pieceSeq: number; // counter for unique piece ids
   readonly streak: number; // consecutive line-clearing placements (0 = no active streak)
+  readonly streakGraceUsed: boolean; // grace token spent this streak? one no-clear (at streak >= 2) is forgiven before the streak breaks; refills on the next clear
 
   // --- Mode ---
   readonly mode: GameMode;
@@ -108,7 +109,10 @@ export type GameEvent =
   // cumulative per-color gems cleared so far (for HUD progress vs quotas).
   | { type: 'gemsCleared'; cleared: Record<number, number>; totals: Record<number, number> }
   | { type: 'scored'; delta: number; total: number; kind: 'placement' | 'clear' }
-  | { type: 'combo'; streak: number; multiplier: number; lines: number }
+  // `graceReady` = whether a streak-grace token is available going forward
+  // (true iff !streakGraceUsed). A clear refills grace, so it is true here; the
+  // HUD can render streak level, multiplier, and grace state from this event.
+  | { type: 'combo'; streak: number; multiplier: number; lines: number; graceReady: boolean }
   | { type: 'refill'; pieces: Piece[] }
   | { type: 'gameover'; finalScore: number; highScore: number }
   | { type: 'levelcomplete'; level: number; score: number }

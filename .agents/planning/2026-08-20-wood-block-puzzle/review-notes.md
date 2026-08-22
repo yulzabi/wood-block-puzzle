@@ -87,9 +87,15 @@ play" node via the one tested `nextLevelToPlay` helper (sole caller `levelMapNod
 app.ts). Locked nodes = native `disabled` (not clickable/focusable). Replay regenerates via
 `newLevelsGame`. Home: Levels→map. 213 green.**
 
-- [ ] **Owner on-device pass (PENDING):** trail reads well; the glowing "current" node is
-  obviously the one to play; tapping a node opens the right level + Play/Replay starts it;
-  locked nodes clearly locked; keyboard nav works.
+- [x] **Map/zoom fixes (6fe7546) — verified on device (owner "looks ok", 2026-08-22).** Slalom
+  trail with "?" hidden places; nodes absolute-positioned so hit area = paint (fixed the
+  tap-a-specific-spot bug); zoom normal (map overflow-x clipped + trail scrollTop instead of
+  document scroll; WCAG pinch-zoom preserved). Pushed; local == origin/main.
+- [ ] **FUTURE: UX/UI designer polish pass** (owner plan, post-functional-complete). A dedicated
+  design review/improvement plan comes AFTER the game is mechanically done. Candidate inputs for
+  that pass are already noted across this file: map visual language, gem/HUD legibility, streak
+  feedback (P7), drag-lag polish (P0.7), overall visual system. Don't over-invest in bespoke
+  visuals before then — mechanics first.
 
 ## P2 — Hints (OFF by default)
 **Status: DONE (P2a 5ab1892 `firstPlacement` core + `hasAnyPlacement` refactor to delegate;
@@ -144,13 +150,52 @@ solvability invariant; Slice 3 (48f054c) engine either/or win + `gemsCleared` ev
 
 ## P5 — Resume in-progress game
 
-- [ ] Revisits the locked **high-score-only persistence** decision — owner has approved as
-  the planned next step; capture it in an ADR when built so it's not seen as a silent
-  reversal.
-- [ ] `Uint8Array` fields (`board`, `gems`) need `Array.from` round-trip in serialize/
-  deserialize; add explicit corrupt-blob and version-mismatch fallback tests.
+**Progress: P5a (114e1a7) serialize/deserialize DONE. `wbp.v1.save` versioned; full GameState
+incl. Uint8Array board/gems (round-trip as real Uint8Arrays) + per-piece gems + rngState
+(verbatim, no re-seed). Strict validation → null on corrupt/missing/version/wrong-length, never
+half-restore. 220 green. Storage-only.**
+
+- [x] `Uint8Array` fields round-trip via `Array.from`/`Uint8Array.from`; corrupt-blob +
+  version-mismatch fallback tests — done in P5a.
+- [ ] **P5b (next) — app wiring (spine):** save per committed move + on `visibilitychange`/
+  `pagehide`; **clear save on every terminal state** (game-over/level-complete/level-failed/
+  quit-to-menu — no resuming a finished game); "Continue" on home only when a valid `playing`
+  save exists; restore re-enters correct mode/screen + re-renders.
+- [ ] **P5-A (Option A: resume-from-context, two slots — Endless + one shared Levels).** Replaces
+  the single-slot P5b. Slice 1 (66b6188) keyed storage; Slice 2 (272219f) app wiring DONE —
+  shims deleted, per-mode API, Endless "Continue or New?" prompt + level-card "Continue" (only for
+  the matching saved level), per-slot terminal clears, ← Menu = PAUSE (saves, does NOT clear;
+  owner Option 1), Play/Replay clears stale levels save. Render-assert `app.dom.test.ts` mounts the
+  app and asserts the Continue/New buttons actually render (closes the P5b green-but-invisible gap).
+  225 green.
+  - [x] **Owner DEVICE-VERIFIED (2026-08-22): resume works.** Endless ← Menu → Continue/New;
+    level ← Menu → node Continue; finish/lose clears; reload resumable. Plus level-card
+    **"Start over"** (13fa31a) — resumable card now offers Continue + one-tap Start over
+    (clears levels slot + fresh), consistent with Endless "New game"; render-assert covers both
+    button states. 225 green.
+  - [x] **Slice 3 (3ec24ee) — DONE.** ADR-0007 per-context-resume (supersedes 0001's no-persist
+    clause + interim 0006); 0006 marked superseded (kept for history); README index updated.
+    Docs-only. **P5 COMPLETE & device-verified.**
+- [ ] **P7 dependency:** when P7 adds `streakGraceUsed`, bump the P5 save `schema` version + add
+  the field (old saves without it → null, acceptable).
 
 ## P6 — Hygiene guardrails (DONE, commit c2912cc)
+
+**Perf track (from `.agents/planning/2026-08-21-performance/plan.md`, PE plan):**
+- [x] **P-1 (1481dad) — measurement harness + lighthouse gates.** `?perf=1` probe (FPS/longtask/
+  listener-leak), completely inert without the flag; `run-lighthouse.mjs` now gates (non-zero exit)
+  on budgets. Isolated (perf-probe.ts/main.ts/scripts) — no app/hud/scoring/game.
+- [x] **P-2 (539af18) — precache diet.** Splash PNGs dropped from SW precache: 2.05 MB → 127 KB
+  (under the 150 KB gate). `vite.config.ts` only.
+- [ ] **P-3 (next, Track P) — compositor-pure drag (Tier 1):** `game.css` only — drag-ghost
+  `filter:drop-shadow`→`box-shadow` on ghost blocks; de-filter preview checkmark. On-device gate.
+  → [x] DONE (578bc58): filter removed from `.drag-ghost`, lift shadow baked onto blocks as
+  box-shadow, preview checkmark de-filtered. game.css only. **Owner iPad eyeball pending.**
+- [x] **P7 CORE (1d8e960) — streak grace + ×5 cap.** `streakMultiplier` capped ×5; `streakGraceUsed`
+  on GameState (clear refills / hold-once-at-streak≥2 / else reset), threaded through constructors;
+  combo event gains `graceReady`; save schema bumped 1→2 (v1 saves → null). Core-only, 230 green.
+- [ ] **THEN serialize spine (both edit app.ts/hud.ts):** Perf Tier 2 (calm drop frame) and P7
+  HUD-wiring — one after the other, not concurrent.
 
 - [ ] **Bleeding-edge major pins** (TS 7 / Vite 8 / Lighthouse 13 / Vitest 4) — watch only.
   Re-run `npm run lighthouse` after any dep bump; the SW-precache reader and the LH

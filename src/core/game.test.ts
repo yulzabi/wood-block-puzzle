@@ -31,6 +31,7 @@ function playing(
   highScore = 0,
   streak = 0,
   rngState = 123456789,
+  streakGraceUsed = false,
 ): GameState {
   return {
     board,
@@ -41,6 +42,7 @@ function playing(
     rngState,
     pieceSeq: tray.length,
     streak,
+    streakGraceUsed,
     mode: 'endless',
     level: 0,
     goalType: 'score',
@@ -85,6 +87,7 @@ function levelsState(opts: {
     rngState: 123456789,
     pieceSeq: opts.tray.length,
     streak: 0,
+    streakGraceUsed: false,
     mode: 'levels',
     level: opts.level ?? 1,
     goalType: opts.goalType ?? 'score',
@@ -258,6 +261,7 @@ describe('restart', () => {
       rngState: 987654321,
       pieceSeq: 9,
       streak: 0,
+      streakGraceUsed: false,
       mode: 'endless',
       level: 0,
       goalType: 'score',
@@ -556,14 +560,68 @@ describe('applyMove — streak / combo', () => {
     expect(res.state.score).toBe(21);
   });
 
-  it('resets the streak to 0 on a placement that clears nothing (no combo event)', () => {
-    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 50, 50, 5);
+  it('resets the streak to 0 on a no-clear once grace is already spent (no combo event)', () => {
+    // streak 5 but grace already consumed -> the no-clear resets it outright.
+    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 50, 50, 5, 123456789, true);
 
     const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 4, col: 4 } });
 
     expect(res.state.streak).toBe(0);
+    expect(res.state.streakGraceUsed).toBe(false);
     expect(types(res.events)).not.toContain('combo');
     expect(types(res.events)).not.toContain('cleared');
+  });
+});
+
+describe('applyMove — streak grace', () => {
+  it('holds the streak on one no-clear at streak >= 2 and consumes grace', () => {
+    // streak 2, grace fresh -> a no-clear HOLDS the streak and marks grace used.
+    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 20, 20, 2, 123456789, false);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 4, col: 4 } });
+
+    expect(res.state.streak).toBe(2); // unchanged
+    expect(res.state.streakGraceUsed).toBe(true); // grace consumed
+    expect(types(res.events)).not.toContain('combo');
+    expect(types(res.events)).not.toContain('cleared');
+  });
+
+  it('resets on a second consecutive no-clear (grace already used)', () => {
+    // streak 3 with grace already spent -> this no-clear breaks the streak.
+    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 20, 20, 3, 123456789, true);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 4, col: 4 } });
+
+    expect(res.state.streak).toBe(0);
+    expect(res.state.streakGraceUsed).toBe(false);
+  });
+
+  it('does not apply grace below streak 2 (a no-clear at streak 1 resets)', () => {
+    const state = playing(createBoard(), [piece('s', single, 4), piece('z', square2, 5)], 10, 10, 1, 123456789, false);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 4, col: 4 } });
+
+    expect(res.state.streak).toBe(0);
+    expect(res.state.streakGraceUsed).toBe(false);
+  });
+
+  it('a clearing placement refills grace and increments the streak', () => {
+    const board = createBoard();
+    for (let c = 1; c < BOARD_SIZE; c++) board[idx(0, c)] = 1; // row 0 missing only (0,0)
+    // Enter with streak 3 and grace already spent; the clear bumps to 4 and refills grace.
+    const state = playing(board, [piece('s', single, 4), piece('z', square2, 5)], 0, 0, 3, 123456789, true);
+
+    const res = applyMove(state, { type: 'place', pieceId: 's', at: { row: 0, col: 0 } });
+
+    expect(res.state.streak).toBe(4);
+    expect(res.state.streakGraceUsed).toBe(false); // grace refilled by the clear
+    // combo carries the refreshed grace state for the HUD.
+    expect(res.events.find((e) => e.type === 'combo')).toMatchObject({
+      streak: 4,
+      multiplier: 2.5,
+      lines: 1,
+      graceReady: true,
+    });
   });
 });
 
@@ -616,6 +674,7 @@ describe('applyMove — a refill can immediately end the game', () => {
       rngState: noSingleRng(),
       pieceSeq: tray.length,
       streak: 0,
+      streakGraceUsed: false,
       mode: 'levels',
       level: 4,
       goalType: 'score',

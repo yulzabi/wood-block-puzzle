@@ -44,6 +44,7 @@ function richEndlessState(): GameState {
     rngState: 42424242,
     pieceSeq: 5,
     streak: 1,
+    streakGraceUsed: false,
     mode: 'endless',
     level: 0,
     goalType: 'score',
@@ -78,6 +79,7 @@ function richState(): GameState {
     rngState: 123456789,
     pieceSeq: 10,
     streak: 3,
+    streakGraceUsed: true,
     mode: 'levels',
     level: 4,
     goalType: 'gems',
@@ -496,6 +498,22 @@ describe('game save/restore (keyed by mode)', () => {
     );
     tampered.state.board = [1, 2, 3];
     map.set(LEVELS_KEY, JSON.stringify(tampered));
+    expect(loadLevelsSave()).toBeNull();
+  });
+
+  it('discards an old v:1 save (pre-streakGraceUsed schema) as null', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    // An otherwise-valid blob at the previous schema (no streakGraceUsed field):
+    // the version check alone must reject it rather than half-restoring.
+    const legacy = JSON.parse(
+      JSON.stringify({
+        v: 1,
+        state: { ...richState(), board: Array.from(richState().board), gems: Array.from(richState().gems) },
+      }),
+    );
+    delete legacy.state.streakGraceUsed;
+    map.set(LEVELS_KEY, JSON.stringify(legacy));
     expect(loadLevelsSave()).toBeNull();
   });
 

@@ -20,9 +20,9 @@ export function lineClearScore(lineCount: number): number {
 /**
  * Streak (strike) multiplier applied to the line-clear bonus. Clearing lines on
  * consecutive placements builds a streak: ×1 for the first (streak ≤ 1), then
- * +0.5 per consecutive clear, capped at ×4 (streak 2→1.5, 3→2, …, 7+→4).
+ * +0.5 per consecutive clear, capped at ×5 (streak 2→1.5, 3→2, …, 9+→5).
  */
 export function streakMultiplier(streak: number): number {
   if (streak <= 1) return 1;
-  return Math.min(1 + 0.5 * (streak - 1), 4);
+  return Math.min(1 + 0.5 * (streak - 1), 5);
 }

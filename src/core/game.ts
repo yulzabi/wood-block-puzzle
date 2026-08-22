@@ -40,6 +40,7 @@ export function newGame(seed: number, highScore: number): GameState {
     rngState: seedState(seed),
     pieceSeq: 0,
     streak: 0,
+    streakGraceUsed: false,
     mode: 'endless',
     level: 0,
     goalType: 'score',
@@ -63,6 +64,7 @@ function beginPlaying(state: GameState): GameState {
     rngState,
     pieceSeq: nextSeq,
     streak: 0,
+    streakGraceUsed: false,
     mode: 'endless',
     level: 0,
     goalType: 'score',
@@ -99,6 +101,7 @@ function beginLevel(state: GameState, level: number): GameState {
     rngState,
     pieceSeq: drawn.nextSeq,
     streak: 0,
+    streakGraceUsed: false,
     mode: 'levels',
     level,
     goalType: gen.goalType,
@@ -229,8 +232,21 @@ export function applyMove(state: GameState, move: Move): MoveResult {
   }
 
   // 3. Streak (strike): clearing lines on consecutive placements builds a streak
-  //    that multiplies the line-clear bonus; a no-clear placement resets it.
-  const streak = lineCount > 0 ? state.streak + 1 : 0;
+  //    that multiplies the line-clear bonus. A clear grows the streak and refills
+  //    the grace token. A no-clear at streak >= 2 with grace available is forgiven
+  //    (streak held, grace consumed); otherwise the streak breaks.
+  let streak: number;
+  let streakGraceUsed: boolean;
+  if (lineCount > 0) {
+    streak = state.streak + 1;
+    streakGraceUsed = false; // a clear refills grace
+  } else if (state.streak >= 2 && !state.streakGraceUsed) {
+    streak = state.streak; // grace holds the streak
+    streakGraceUsed = true; // grace consumed
+  } else {
+    streak = 0;
+    streakGraceUsed = false;
+  }
 
   // 4. Score: placement first, then the streak-multiplied line-clear bonus.
   const placementPts = placementScore(piece.shape.size);
@@ -241,7 +257,7 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     const clearPts = Math.round(lineClearScore(lineCount) * multiplier);
     score += clearPts;
     events.push({ type: 'scored', delta: clearPts, total: score, kind: 'clear' });
-    events.push({ type: 'combo', streak, multiplier, lines: lineCount });
+    events.push({ type: 'combo', streak, multiplier, lines: lineCount, graceReady: !streakGraceUsed });
   }
 
   // 5. Mark the piece placed; refill when the whole tray is exhausted. On gem
@@ -302,6 +318,7 @@ export function applyMove(state: GameState, move: Move): MoveResult {
       rngState,
       pieceSeq,
       streak,
+      streakGraceUsed,
       mode: state.mode,
       level: state.level,
       goalType: state.goalType,

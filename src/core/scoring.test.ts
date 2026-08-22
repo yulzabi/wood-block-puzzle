@@ -31,16 +31,19 @@ describe('streakMultiplier', () => {
     expect(streakMultiplier(1)).toBe(1);
   });
 
-  it('adds 0.5 per consecutive clear', () => {
+  it('adds 0.5 per consecutive clear up to the cap', () => {
     expect(streakMultiplier(2)).toBe(1.5);
     expect(streakMultiplier(3)).toBe(2);
     expect(streakMultiplier(4)).toBe(2.5);
     expect(streakMultiplier(5)).toBe(3);
     expect(streakMultiplier(6)).toBe(3.5);
+    expect(streakMultiplier(7)).toBe(4);
+    expect(streakMultiplier(8)).toBe(4.5);
   });
 
-  it('caps at 4', () => {
-    expect(streakMultiplier(7)).toBe(4);
-    expect(streakMultiplier(20)).toBe(4);
+  it('caps at 5, first reached at streak 9', () => {
+    expect(streakMultiplier(9)).toBe(5);
+    expect(streakMultiplier(10)).toBe(5);
+    expect(streakMultiplier(20)).toBe(5);
   });
 });

@@ -300,8 +300,9 @@ export function saveSeenIntro(seen = true): void {
 
 // ---- In-progress game save/restore ----
 
-/** Schema version of the save blob; a mismatch on load discards the save. */
-const SAVE_SCHEMA = 1;
+/** Schema version of the save blob; a mismatch on load discards the save.
+ *  v2 adds GameState.streakGraceUsed — a v1 blob lacks it and loads as null. */
+const SAVE_SCHEMA = 2;
 const CELL_COUNT = BOARD_SIZE * BOARD_SIZE;
 
 const isNum = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
@@ -402,6 +403,7 @@ function readSave(key: string): GameState | null {
     ) {
       return null;
     }
+    if (typeof o['streakGraceUsed'] !== 'boolean') return null;
     if (typeof o['status'] !== 'string' || !SAVE_STATUSES.has(o['status'])) return null;
     if (typeof o['mode'] !== 'string' || !SAVE_MODES.has(o['mode'])) return null;
     if (typeof o['goalType'] !== 'string' || !SAVE_GOALS.has(o['goalType'])) return null;
@@ -419,6 +421,7 @@ function readSave(key: string): GameState | null {
       rngState: o['rngState'],
       pieceSeq: o['pieceSeq'],
       streak: o['streak'],
+      streakGraceUsed: o['streakGraceUsed'],
       mode: o['mode'] as GameMode,
       level: o['level'],
       goalType: o['goalType'] as GoalType,
