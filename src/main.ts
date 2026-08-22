@@ -12,6 +12,11 @@
 
 import { registerSW } from 'virtual:pwa-register';
 import { mountApp } from './app';
+import { perfRequested, startPerfProbe } from './platform/perf-probe';
+
+// On-device perf overlay, only with ?perf=1. Started before the app mounts so its
+// listener count includes the app's wiring. Completely inert without the flag.
+if (perfRequested()) startPerfProbe();
 
 mountApp('app');
 

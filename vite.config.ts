@@ -27,9 +27,10 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html'],
       include: ['src/**'],
-      // Exclude tests, type decls, and the thin browser-only entry/bootstrap
-      // (main.ts registers the SW; it isn't unit-testable in isolation).
-      exclude: ['src/**/*.test.ts', 'src/**/*.d.ts', 'src/main.ts'],
+      // Exclude tests, type decls, and thin browser-only bootstrap/dev tooling
+      // (main.ts registers the SW; perf-probe is a ?perf=1 on-device overlay —
+      // neither is unit-testable in isolation).
+      exclude: ['src/**/*.test.ts', 'src/**/*.d.ts', 'src/main.ts', 'src/platform/perf-probe.ts'],
       // Floors set just under the measured baseline so they guard against
       // erosion without being instantly red. The pure logic layers carry a
       // much higher bar than the DOM/orchestration layers.

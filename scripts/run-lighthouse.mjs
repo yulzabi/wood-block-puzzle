@@ -15,7 +15,8 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync, readdirSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch } from 'chrome-launcher';
@@ -156,10 +157,57 @@ async function main() {
     if (off.ok) console.log(`  ✅ offline-ready: ${off.count} assets precached (html, js, css, icons)`);
     else off.problems.forEach((p) => console.log(`  ✗ ${p}`));
 
+    // === Budget gates (fail the run, don't just report) ===
+    console.log('\n=== Budgets ===');
+    const BUDGETS = { perfScore: 95, precacheKB: 150, mainJsGzKB: 25 };
+
+    // Performance score.
+    if (!runtimeError) {
+      const perf = lhr.categories.performance?.score;
+      const perfPct = perf == null ? null : Math.round(perf * 100);
+      if (perfPct != null && perfPct >= BUDGETS.perfScore) {
+        console.log(`  ✅ performance ${perfPct} ≥ ${BUDGETS.perfScore}`);
+      } else {
+        fail(`performance ${perfPct ?? 'n/a'} < ${BUDGETS.perfScore}`);
+      }
+    }
+
+    // Workbox precache total (raw bytes of every precached file).
+    const precacheBytes = off.urls.reduce((sum, u) => {
+      try {
+        return sum + statSync(join(ROOT, 'dist', u.replace(/^\//, ''))).size;
+      } catch {
+        return sum;
+      }
+    }, 0);
+    const precacheKB = Math.round(precacheBytes / 1024);
+    if (precacheKB <= BUDGETS.precacheKB) {
+      console.log(`  ✅ precache ${precacheKB} KB ≤ ${BUDGETS.precacheKB} KB (${off.count} assets)`);
+    } else {
+      fail(`Workbox precache ${precacheKB} KB > ${BUDGETS.precacheKB} KB`);
+    }
+
+    // Main app JS bundle, gzipped.
+    let mainJsGzKB = null;
+    try {
+      const assetsDir = join(ROOT, 'dist', 'assets');
+      const mainJs = readdirSync(assetsDir).find((f) => /^index-.*\.js$/.test(f));
+      if (mainJs) mainJsGzKB = Math.round(gzipSync(readFileSync(join(assetsDir, mainJs))).length / 1024);
+    } catch {
+      // fall through to the not-found failure below
+    }
+    if (mainJsGzKB == null) {
+      fail('main app JS bundle not found in dist/assets');
+    } else if (mainJsGzKB <= BUDGETS.mainJsGzKB) {
+      console.log(`  ✅ main JS ${mainJsGzKB} KB gz ≤ ${BUDGETS.mainJsGzKB} KB`);
+    } else {
+      fail(`main JS ${mainJsGzKB} KB gz > ${BUDGETS.mainJsGzKB} KB`);
+    }
+
     if (!inst.ok) fail('PWA installability check failed');
     if (!off.ok) fail('Offline precache check failed');
     if (process.exitCode !== 1) {
-      console.log('\n✅ PASS — installable + offline-capable PWA.');
+      console.log('\n✅ PASS — installable + offline-capable PWA, within budgets.');
     }
   } finally {
     if (chrome) await chrome.kill();
