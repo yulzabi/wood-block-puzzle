@@ -348,12 +348,16 @@ function isValidPiece(x: unknown): boolean {
   return true;
 }
 
-/**
- * Persist the full in-progress game so it can resume after reload/backgrounding.
- * Uint8Array channels (board, gems) are stored as plain number arrays (JSON can't
- * carry typed arrays); everything else is JSON-safe. Silent no-op on failure.
- */
-export function saveGame(state: GameState): void {
+/** Per-mode save slots — an Endless game and a Levels game resume independently. */
+const SAVE_ENDLESS_KEY = 'wbp.v1.save.endless';
+const SAVE_LEVELS_KEY = 'wbp.v1.save.levels';
+
+function slotKey(mode: GameMode): string {
+  return mode === 'endless' ? SAVE_ENDLESS_KEY : SAVE_LEVELS_KEY;
+}
+
+/** Serialize + persist a state under `key`. Uint8Arrays become plain arrays. */
+function writeSave(key: string, state: GameState): void {
   const storage = getStorage();
   if (!storage) return;
   try {
@@ -361,23 +365,22 @@ export function saveGame(state: GameState): void {
       v: SAVE_SCHEMA,
       state: { ...state, board: Array.from(state.board), gems: Array.from(state.gems) },
     };
-    storage.setItem(SAVE_KEY, JSON.stringify(blob));
+    storage.setItem(key, JSON.stringify(blob));
   } catch {
     // Quota exceeded / disabled — silently ignore.
   }
 }
 
 /**
- * Load a saved in-progress game, or null if there is none, the schema version
- * mismatches, or the blob is corrupt / missing any required field. Never throws
- * and never half-restores. `rngState` is restored verbatim (no re-seed) so the
- * piece sequence continues exactly where it left off.
+ * Read + validate the save under `key`, or null if missing, the schema version
+ * mismatches, or any required field is missing/invalid. Never throws and never
+ * half-restores. `rngState` is restored verbatim (no re-seed).
  */
-export function loadGame(): GameState | null {
+function readSave(key: string): GameState | null {
   const storage = getStorage();
   if (!storage) return null;
   try {
-    const raw = storage.getItem(SAVE_KEY);
+    const raw = storage.getItem(key);
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return null;
@@ -429,13 +432,72 @@ export function loadGame(): GameState | null {
   }
 }
 
-/** Remove any saved in-progress game. Silent no-op on failure. */
-export function clearSave(): void {
+function removeKey(key: string): void {
   const storage = getStorage();
   if (!storage) return;
   try {
-    storage.removeItem(SAVE_KEY);
+    storage.removeItem(key);
   } catch {
     // ignore
   }
+}
+
+/** A resumable save is a valid blob whose game is still in progress. */
+function resumable(state: GameState | null): GameState | null {
+  return state && state.status === 'playing' ? state : null;
+}
+
+/**
+ * Persist the full in-progress game so it can resume after reload/backgrounding.
+ * Routed to the per-mode slot by `state.mode`, so an Endless and a Levels game
+ * survive independently. Uint8Array channels round-trip as plain arrays. Also
+ * cleans up the pre-keyed single slot. Silent no-op on failure.
+ */
+export function saveGame(state: GameState): void {
+  writeSave(slotKey(state.mode), state);
+  removeKey(SAVE_KEY); // migrate away from the legacy single slot
+}
+
+/** The resumable Endless game, or null. */
+export function loadEndlessSave(): GameState | null {
+  return resumable(readSave(SAVE_ENDLESS_KEY));
+}
+
+/** The resumable Levels game, or null. */
+export function loadLevelsSave(): GameState | null {
+  return resumable(readSave(SAVE_LEVELS_KEY));
+}
+
+/** Whether a resumable Endless game exists. */
+export function hasEndlessSave(): boolean {
+  return loadEndlessSave() !== null;
+}
+
+/** Whether a resumable Levels game exists. */
+export function hasLevelsSave(): boolean {
+  return loadLevelsSave() !== null;
+}
+
+/** Remove the Endless save. Silent no-op on failure. */
+export function clearEndlessSave(): void {
+  removeKey(SAVE_ENDLESS_KEY);
+}
+
+/** Remove the Levels save. Silent no-op on failure. */
+export function clearLevelsSave(): void {
+  removeKey(SAVE_LEVELS_KEY);
+}
+
+// --- Transitional back-compat shims (removed once the app is rewired to the
+//     per-mode API in the next slice). The app still calls loadGame/clearSave. ---
+
+/** @deprecated Use loadEndlessSave/loadLevelsSave. Returns whichever is resumable. */
+export function loadGame(): GameState | null {
+  return loadLevelsSave() ?? loadEndlessSave();
+}
+
+/** @deprecated Use clearEndlessSave/clearLevelsSave. Clears both slots. */
+export function clearSave(): void {
+  clearEndlessSave();
+  clearLevelsSave();
 }

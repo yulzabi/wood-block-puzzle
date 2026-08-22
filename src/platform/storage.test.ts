@@ -15,12 +15,45 @@ import {
   levelResult,
   nextLevelToPlay,
   saveGame,
-  loadGame,
-  clearSave,
+  loadEndlessSave,
+  loadLevelsSave,
+  hasEndlessSave,
+  hasLevelsSave,
+  clearEndlessSave,
+  clearLevelsSave,
 } from './storage';
 import type { GameState, Piece } from '../core/types';
 import { BOARD_SIZE } from '../core/types';
 import { SHAPES } from '../core/shapes';
+
+/** A rich in-progress endless state: non-empty board, no gems. */
+function richEndlessState(): GameState {
+  const board = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
+  board[0] = 1;
+  board[5] = 4;
+  const tray: Piece[] = [
+    { id: 'e-1', shape: SHAPES[0]!, material: 2, placed: false },
+    { id: 'e-2', shape: SHAPES[3]!, material: 6, placed: true },
+  ];
+  return {
+    board,
+    tray,
+    score: 88,
+    highScore: 500,
+    status: 'playing',
+    rngState: 42424242,
+    pieceSeq: 5,
+    streak: 1,
+    mode: 'endless',
+    level: 0,
+    goalType: 'score',
+    targetScore: 0,
+    gems: new Uint8Array(BOARD_SIZE * BOARD_SIZE),
+    quotas: {},
+    gemsCleared: {},
+    gemSupplyRemaining: {},
+  };
+}
 
 /** A rich in-progress gem-level state: non-empty typed arrays + gem-bearing pieces. */
 function richState(): GameState {
@@ -391,57 +424,70 @@ describe('level results', () => {
   });
 });
 
-describe('game save/restore', () => {
-  const SAVE_KEY = 'wbp.v1.save';
+describe('game save/restore (keyed by mode)', () => {
+  const LEVELS_KEY = 'wbp.v1.save.levels';
+  const LEGACY_KEY = 'wbp.v1.save';
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('round-trips a rich playing state with typed arrays + per-piece gems', () => {
+  it('round-trips a levels save (typed arrays + per-piece gems) into the levels slot', () => {
     const { storage } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
-    const state = richState();
+    const state = richState(); // mode: 'levels'
     saveGame(state);
-    const loaded = loadGame();
 
-    expect(loaded).not.toBeNull();
-    expect(loaded).toEqual(state); // deep-equal to the original
-    // board/gems restored as real Uint8Arrays, not plain arrays.
+    const loaded = loadLevelsSave();
+    expect(loaded).toEqual(state);
     expect(loaded!.board).toBeInstanceOf(Uint8Array);
     expect(loaded!.gems).toBeInstanceOf(Uint8Array);
-    expect(Array.from(loaded!.board)).toEqual(Array.from(state.board));
-    // per-piece gems preserved.
     expect(loaded!.tray[0]?.gems).toEqual({ 0: 2 });
     expect(loaded!.tray[1]?.gems).toBeUndefined();
+    // The endless slot is untouched.
+    expect(loadEndlessSave()).toBeNull();
   });
 
-  it('returns null when the key is missing', () => {
-    vi.stubGlobal('localStorage', makeMockStorage().storage);
-    expect(loadGame()).toBeNull();
+  it('round-trips an endless save into the endless slot', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    const state = richEndlessState();
+    saveGame(state);
+
+    expect(loadEndlessSave()).toEqual(state);
+    expect(loadLevelsSave()).toBeNull();
   });
 
-  it('returns null (without throwing) on a corrupt blob', () => {
+  it('endless and levels saves are independent — saving/clearing one never affects the other', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richEndlessState());
+    saveGame(richState());
+    expect(hasEndlessSave()).toBe(true);
+    expect(hasLevelsSave()).toBe(true);
+
+    // Clearing levels leaves endless intact.
+    clearLevelsSave();
+    expect(hasLevelsSave()).toBe(false);
+    expect(hasEndlessSave()).toBe(true);
+
+    // ...and clearing endless leaves a fresh levels save intact.
+    saveGame(richState());
+    clearEndlessSave();
+    expect(hasEndlessSave()).toBe(false);
+    expect(hasLevelsSave()).toBe(true);
+  });
+
+  it('missing / corrupt / schema-mismatch / partial / wrong-length -> null (per slot)', () => {
     const { storage, map } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
-    map.set(SAVE_KEY, '{not json');
-    expect(() => loadGame()).not.toThrow();
-    expect(loadGame()).toBeNull();
-  });
-
-  it('returns null on a schema-version mismatch', () => {
-    const { storage, map } = makeMockStorage();
-    vi.stubGlobal('localStorage', storage);
-    map.set(SAVE_KEY, JSON.stringify({ v: 999, state: {} }));
-    expect(loadGame()).toBeNull();
-  });
-
-  it('returns null on a partial / garbage state and never half-restores', () => {
-    const { storage, map } = makeMockStorage();
-    vi.stubGlobal('localStorage', storage);
-    // Right version but almost everything missing.
-    map.set(SAVE_KEY, JSON.stringify({ v: 1, state: { score: 10 } }));
-    expect(loadGame()).toBeNull();
-    // Valid in every way except the board is the wrong length.
+    expect(loadLevelsSave()).toBeNull(); // missing
+    map.set(LEVELS_KEY, '{not json');
+    expect(() => loadLevelsSave()).not.toThrow();
+    expect(loadLevelsSave()).toBeNull();
+    map.set(LEVELS_KEY, JSON.stringify({ v: 999, state: {} }));
+    expect(loadLevelsSave()).toBeNull();
+    map.set(LEVELS_KEY, JSON.stringify({ v: 1, state: { score: 10 } }));
+    expect(loadLevelsSave()).toBeNull();
     const tampered = JSON.parse(
       JSON.stringify({
         v: 1,
@@ -449,24 +495,46 @@ describe('game save/restore', () => {
       }),
     );
     tampered.state.board = [1, 2, 3];
-    map.set(SAVE_KEY, JSON.stringify(tampered));
-    expect(loadGame()).toBeNull();
+    map.set(LEVELS_KEY, JSON.stringify(tampered));
+    expect(loadLevelsSave()).toBeNull();
   });
 
-  it('clearSave removes the save (subsequent load -> null)', () => {
+  it('has*Save is true only for a valid PLAYING blob', () => {
     const { storage } = makeMockStorage();
     vi.stubGlobal('localStorage', storage);
+    expect(hasLevelsSave()).toBe(false);
+    saveGame(richState()); // status 'playing'
+    expect(hasLevelsSave()).toBe(true);
+    // A finished game in the same slot must not count as resumable.
+    saveGame({ ...richState(), status: 'levelcomplete' });
+    expect(hasLevelsSave()).toBe(false);
+  });
+
+  it('clear removes only its own slot', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    saveGame(richEndlessState());
     saveGame(richState());
-    expect(loadGame()).not.toBeNull();
-    clearSave();
-    expect(loadGame()).toBeNull();
+    clearEndlessSave();
+    expect(hasEndlessSave()).toBe(false);
+    expect(hasLevelsSave()).toBe(true);
+  });
+
+  it('ignores the legacy single-slot key (treated as absent) and cleans it up on save', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(LEGACY_KEY, JSON.stringify({ v: 1, state: {} }));
+    expect(loadLevelsSave()).toBeNull();
+    expect(loadEndlessSave()).toBeNull();
+    saveGame(richState());
+    expect(map.has(LEGACY_KEY)).toBe(false); // cleaned up on the next save
   });
 
   it('save/clear are no-ops without throwing when storage is unavailable', () => {
     vi.stubGlobal('localStorage', undefined);
     expect(() => saveGame(richState())).not.toThrow();
-    expect(() => clearSave()).not.toThrow();
-    expect(loadGame()).toBeNull();
+    expect(() => clearLevelsSave()).not.toThrow();
+    expect(loadLevelsSave()).toBeNull();
   });
 });
 
