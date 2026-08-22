@@ -13,7 +13,7 @@
 Persist the full in-progress `GameState` under a versioned key (`wbp.v1.save`) so a game resumes exactly where it left off:
 
 - Save after each committed move, on entering a game (overwriting any stale save), and on backgrounding (`visibilitychange` → hidden, and `pagehide`).
-- Clear the save on every terminal transition — game-over, level-complete, level-failed, and quit-to-menu — so a finished or abandoned game is never resumable.
+- Clear the save only on true end-states — game-over, level-complete, level-failed — so a finished game is never resumable. Leaving to the menu (in-game "← Menu") is a **pause**, not an abandon: the save is kept and Continue picks it back up. Starting any new game overwrites the save.
 - Restore `rngState` verbatim (no re-seed) so the piece sequence continues deterministically.
 - Home shows **Continue** only when a valid `status: 'playing'` save exists (no dead button otherwise).
 - On a schema-version mismatch, or any corrupt/missing/invalid field, the save is discarded rather than half-restored — never-throw, matching the rest of `storage.ts`.

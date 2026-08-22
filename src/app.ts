@@ -686,17 +686,24 @@ export class App {
     this.enterGame();
   }
 
-  /** In-game "← Menu": confirm before abandoning the current run. */
+  /**
+   * In-game "← Menu": leave to the menu WITHOUT ending the game. The snapshot is
+   * kept (saved on every move), so the game stays resumable via Continue — this
+   * is a pause, not an abandon. Only true end-states (game-over / level-complete
+   * / level-failed) clear the save.
+   */
   private confirmQuit(): void {
     if (this.state.status !== 'playing') return;
     this.setInteractive(false); // also stops the keyboard controller's Escape handling
     renderConfirm(this.screens.overlay, {
-      title: 'Quit to menu?',
-      message: 'Your current game will end.',
-      confirmLabel: 'Quit',
+      title: 'Leave to menu?',
+      message: 'Your game is saved — pick it back up with Continue.',
+      confirmLabel: 'Leave',
       cancelLabel: 'Keep playing',
       onConfirm: () => {
-        clearSave(); // abandoned game — not resumable
+        // Ensure the very latest state is saved, then go home (do NOT clear —
+        // the game remains resumable).
+        saveGame(this.state);
         this.goHome();
       },
       onCancel: () => this.resumeGame(),
