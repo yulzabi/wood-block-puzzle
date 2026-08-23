@@ -80,9 +80,10 @@ export class BoardView {
       const row = Math.floor(i / BOARD_SIZE);
       const col = i % BOARD_SIZE;
       cell.setAttribute('aria-label', `row ${row + 1}, column ${col + 1}, empty`);
-      // Explicit placement (not auto-flow): the .board-hl overlay spans the whole
-      // explicit grid, and auto-placed items would be pushed past it into
-      // collapsed implicit rows. Explicitly-placed items may overlap the overlay.
+      // Explicit placement (not auto-flow): keeps every cell pinned to its own
+      // grid line regardless of what else lives in the board's grid (the
+      // .board-hl overlay also claims the full 1/1/-1/-1 area). Auto-placed
+      // cells collapsed into implicit rows when the overlay was in-flow.
       cell.style.gridRow = String(row + 1);
       cell.style.gridColumn = String(col + 1);
       this.cells.push(cell);

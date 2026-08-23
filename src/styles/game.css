@@ -233,6 +233,9 @@
      must match the tracks it spans); --board-pad is the board's own inset only. */
   --board-pad: 8px;
   --board-gap: 5px;
+  /* Containing block for the .board-hl overlay: required so the overlay's
+     grid-area (not the padding box) resolves its abspos box. */
+  position: relative;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
@@ -334,23 +337,31 @@
    this cheap, mostly-transparent layer, never the board's fill/gem texture
    (measured: whole-board damage unions were the drag-lag remainder). */
 .board-hl {
-  /* A grid ITEM of the board's own grid, spanning every track — its box comes
-     from the exact same track math that places the cells, so it aligns with
-     them by construction in every engine. Do NOT position this absolutely:
-     iOS WebKit resolved the previous `position:absolute; inset:0; padding`
-     box 16px (2×pad) short in height, drifting the highlights 2px per row
-     (measured on device: hlΔ 63:(0.0,-14.0) — perf plan §7, 2026-08-22). */
+  /* OUT OF FLOW, but sized by the GRID: an absolutely-positioned grid child with
+     a grid-placement uses its GRID AREA as its containing block, so `inset: 0`
+     makes this box exactly the area the 8x8 tracks occupy — same track math that
+     places the cells (aligned by construction), with no dependence on how an
+     engine resolves a padding box. Both halves matter and were learned on device:
+       - padding-box abspos (`inset:0` + `padding`) misaligned on iOS: the height
+         resolved 16px (2xpad) short, drifting highlights 2px per row
+         (hlΔ 63:(0.0,-14.0));
+       - an IN-FLOW grid item aligned correctly but gave back the drag-perf win
+         (60fps -> slow again on device), so the overlay must stay out of flow.
+     Requires `position: relative` on .board (so the grid container is this
+     element's containing block). See perf plan §7, 2026-08-22. */
+  position: absolute;
   grid-area: 1 / 1 / -1 / -1;
+  inset: 0;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
   gap: var(--board-gap);
   pointer-events: none;
-  /* Own composited layer (real transform, not will-change): highlight churn
-     during a drag repaints this cheap, mostly-transparent layer — never the
-     board texture. That isolation is the plan-B drag-perf win; keep it. */
-  transform: translateZ(0);
-  contain: layout paint;
+  /* Own composited layer: highlight churn during a drag repaints this cheap,
+     mostly-transparent layer — never the board's fill/gem texture. This exact
+     promotion + containment pair is what measured 60fps on the old iPad. */
+  will-change: transform;
+  contain: strict;
 }
 .hcell {
   position: relative;
