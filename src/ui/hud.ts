@@ -17,16 +17,17 @@ export class HUD {
   private readonly endlessRow: HTMLElement;
   private readonly scoreEl: HTMLElement;
   private readonly highEl: HTMLElement;
-  // Levels row (LEVEL / BLOCKS / SCORE toward target) — score-goal levels.
+  // Levels row (BLOCKS / SCORE toward target) — score-goal levels. LEVEL now
+  // lives in the status strip, not this row.
   private readonly levelsRow: HTMLElement;
-  private readonly levelEl: HTMLElement;
   private readonly blocksEl: HTMLElement;
   private readonly blocksBox: HTMLElement;
   private readonly lvlScoreEl: HTMLElement;
-  // Gems row (LEVEL + per-color remaining chips) — gem-goal levels.
+  // Gems row (per-color remaining chips) — gem-goal levels. LEVEL is in the strip.
   private readonly gemsRow: HTMLElement;
-  private readonly gemLevelEl: HTMLElement;
   private readonly gemChipsEl: HTMLElement;
+  // Status strip: left mode tag (LEVEL N / DAILY / ENDLESS).
+  private readonly modeTag: HTMLElement;
   // Standing streak badge (multiplier + grace shield) — both modes, streak ≥ 2.
   private readonly streakBadge: HTMLElement;
   private readonly streakMultEl: HTMLElement;
@@ -46,18 +47,16 @@ export class HUD {
     this.scoreEl = box(this.endlessRow, 'SCORE', 'hud-score');
     this.highEl = box(this.endlessRow, 'BEST', 'hud-high');
 
-    // --- Levels row (score goal) ---
+    // --- Levels row (score goal) — LEVEL relocated to the strip; BLOCKS + SCORE ---
     this.levelsRow = row('hud--levels');
     this.levelsRow.hidden = true;
-    this.levelEl = box(this.levelsRow, 'LEVEL', 'hud-level');
     this.blocksEl = box(this.levelsRow, 'BLOCKS', 'hud-blocks');
     this.blocksBox = this.blocksEl.parentElement as HTMLElement;
     this.lvlScoreEl = box(this.levelsRow, 'SCORE', 'hud-lvlscore');
 
-    // --- Gems row (gem goal) ---
+    // --- Gems row (gem goal) — LEVEL relocated to the strip; chips get full width ---
     this.gemsRow = row('hud--gems');
     this.gemsRow.hidden = true;
-    this.gemLevelEl = box(this.gemsRow, 'LEVEL', 'hud-level');
     this.gemChipsEl = document.createElement('div');
     this.gemChipsEl.className = 'gem-chips';
     this.gemsRow.append(this.gemChipsEl);
@@ -73,11 +72,14 @@ export class HUD {
     this.streakShieldEl.className = 'streak-badge__shield';
     this.streakBadge.append(this.streakMultEl, this.streakShieldEl);
 
-    // The badge lives in its OWN reserved line above the score boxes — a flow slot,
-    // not an absolute overlay — so it can never obscure SCORE/BEST at any width.
+    // Status strip (the reserved line now earns its height): a left mode tag +
+    // the right-aligned streak badge. Same fixed-height flow slot, so the badge
+    // still can't obscure SCORE/BEST and the board never shifts when a streak starts.
+    this.modeTag = document.createElement('span');
+    this.modeTag.className = 'hud-mode-tag';
     const streakLine = document.createElement('div');
     streakLine.className = 'hud-streak-line';
-    streakLine.append(this.streakBadge);
+    streakLine.append(this.modeTag, this.streakBadge);
 
     this.el.append(streakLine, this.endlessRow, this.levelsRow, this.gemsRow);
   }
@@ -101,11 +103,16 @@ export class HUD {
     this.streakShieldEl.classList.toggle('streak-badge__shield--spent', !graceReady);
   }
 
-  /** Endless HUD: score (tweened) + persisted best. */
-  render(score: number, highScore: number): void {
+  /**
+   * Endless / Daily HUD: score (tweened) + persisted best. `context` sets the
+   * status-strip mode tag ('daily' → DAILY, else ENDLESS); defaults to 'endless'
+   * so existing callers are unchanged.
+   */
+  render(score: number, highScore: number, context: 'endless' | 'daily' = 'endless'): void {
     this.endlessRow.hidden = false;
     this.levelsRow.hidden = true;
     this.gemsRow.hidden = true;
+    this.modeTag.textContent = context === 'daily' ? 'DAILY' : 'ENDLESS';
     this.highEl.textContent = String(highScore);
     this.tweenTo(score);
   }
@@ -124,7 +131,7 @@ export class HUD {
     this.endlessRow.hidden = true;
     this.gemsRow.hidden = true;
     this.levelsRow.hidden = false;
-    this.levelEl.textContent = String(level);
+    this.modeTag.textContent = `LEVEL ${level}`;
     this.blocksBox.hidden = total <= 0;
     this.blocksEl.textContent = `${remaining}/${total}`;
     this.lvlScoreEl.textContent = `${score}/${targetScore}`;
@@ -135,7 +142,7 @@ export class HUD {
     this.endlessRow.hidden = true;
     this.levelsRow.hidden = true;
     this.gemsRow.hidden = false;
-    this.gemLevelEl.textContent = String(level);
+    this.modeTag.textContent = `LEVEL ${level}`;
     this.gemChipsEl.textContent = '';
     for (const { color, remaining } of chips) {
       const chip = document.createElement('div');

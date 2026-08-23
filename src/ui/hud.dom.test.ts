@@ -75,4 +75,45 @@ describe('HUD (DOM)', () => {
     hud.renderStreak(4, 2.5, false); // grace spent
     expect(shield().classList.contains('streak-badge__shield--spent')).toBe(true);
   });
+
+  // ---- D2: status strip + score hero ----
+  const modeTag = (): HTMLElement => container.querySelector<HTMLElement>('.hud-mode-tag')!;
+
+  it('status strip mode tag: ENDLESS by default, DAILY for the daily context', () => {
+    hud.render(0, 0);
+    expect(modeTag().textContent).toBe('ENDLESS');
+    hud.render(0, 0, 'daily');
+    expect(modeTag().textContent).toBe('DAILY');
+  });
+
+  it('LEVEL is relocated to the strip — no LEVEL box remains in either row', () => {
+    hud.renderLevels(7, 40, 100, 3, 8);
+    expect(modeTag().textContent).toBe('LEVEL 7');
+    expect(container.querySelector('.hud-level')).toBeNull(); // no LEVEL hud-box
+
+    hud.renderGems(12, [{ color: 1, remaining: 5 }]);
+    expect(modeTag().textContent).toBe('LEVEL 12');
+    expect(container.querySelector('.hud-level')).toBeNull();
+  });
+
+  it('streak badge is preserved in the strip (P7 markup + slot intact)', () => {
+    const strip = container.querySelector<HTMLElement>('.hud-streak-line')!;
+    const badge = strip.querySelector<HTMLElement>('.streak-badge');
+    expect(badge).not.toBeNull();
+    expect(badge!.querySelector('.streak-badge__mult')).not.toBeNull();
+    expect(badge!.querySelector('.streak-badge__shield')).not.toBeNull();
+    // The mode tag (left) and the badge (right) share the same reserved line.
+    expect(strip.querySelector('.hud-mode-tag')).not.toBeNull();
+    // The badge still behaves exactly as P7 defined it.
+    hud.renderStreak(3, 2, true);
+    expect(badge!.hidden).toBe(false);
+  });
+
+  it('score hero: endless row keeps distinct SCORE (.hud-score) + BEST (.hud-high) boxes', () => {
+    hud.render(120, 900);
+    expect(container.querySelector('.hud-score')).not.toBeNull(); // hero box (flex 1.4 in CSS)
+    const bestBox = container.querySelector('.hud-high');
+    expect(bestBox).not.toBeNull(); // secondary box (--fs-chip value + dim label in CSS)
+    expect(bestBox!.querySelector('.hud-value')?.textContent).toBe('900');
+  });
 });
