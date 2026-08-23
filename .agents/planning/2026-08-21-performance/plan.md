@@ -232,6 +232,8 @@ largely defends these already; this tier turns "looks right" into "proven right"
 | 2026-08-22 | Tier 3 paint diet (`15d0539`: coarse-pointer flat blocks, inset-only line-hint, de-filtered gems) | old iPad | drag < 20 fps | drag **25–35 fps**, dips to **18** on very fast sweeps — improved but **below the 40 fps escalation line → plan B**. **REGRESSION (owner-reported):** full-line highlight invisible on touch — the coarse `@media` `.cell.filled` override (game.css:305) sits later than `.cell.line-hint` (261) and `.cell.preview--*` (212) at equal specificity, so filled cells lose the hint ring and the invalid-preview tint on coarse pointers. Hotfix: split the media overrides to sit directly after each base rule. Plan B removes the fragility permanently (highlights leave the cells). |
 | 2026-08-22 | Slice A cascade hotfix (`da1921b`) + Slice B overlay highlights (`76668ca`) | old iPad | drag 25–35 fps (18 fast) | drag **60 fps sustained** — §1 criterion 1 (drag never stutters) **MET**. Open: owner reports the full-row/col line-hint ring sits visibly **too high vs the wood bricks** — **iPad only** (owner: desktop clean; CDP-measured Chrome delta **0.00 px** at all corners). Photo confirms a sub-cell uniform upward shift of the rings. Theory: iOS WebKit misplaces the overlay's **composited layer** (layout agrees, compositor doesn't) — the `will-change: transform` + `contain: strict` promotion combo. Dispatched: `slice-ipad-overlay-alignment.md` (probe gains an on-device `hlΔ` readout + promotion switched to `translateZ(0)` / `contain: layout paint`). |
 | 2026-08-22 | Alignment slice v1 (`e5d8ff5`: `translateZ(0)` + `contain: layout paint` + probe `hlΔ`) | old iPad | rings ~14 px high at bottom row | **Still misaligned — but the diagnostic nailed it: `hlΔ 0:(0.0,0.0) 63:(0.0,−14.0)`.** That is LAYOUT, not compositor: columns perfect, rows each 2.0 px short (14 ÷ 7 steps) ⇒ the overlay's abspos height resolves **16 px (= 2×`--board-pad`) short** — iOS WebKit sizes the `inset: 0` box against the board's *content* box while anchoring its top at the *padding* box; top row aligns, error accumulates downward. Compositor theory retracted. fps still 60. Preview (green/red) offset too — same overlay. Fix v2: make `.board-hl` a **grid item of the board's own grid** (`grid-area: 1/1/-1/-1`, no abspos/inset/padding) so its box comes from the same track math as the cells — aligned by construction, engine-independent. |
+| 2026-08-22 | Alignment v2 (`1c045bd`: in-flow grid-item overlay + explicitly-placed cells) | old iPad | rings 14 px high | **Alignment FIXED on device — but the drag went slow again** (owner; the landscape commit `a9276e2` was explicitly ruled out as the cause). Lesson: making the overlay in-flow cost it the cheap isolated layer plan B depends on. The overlay must satisfy BOTH constraints at once: out of flow (for the layer) *and* grid-derived box (for alignment). |
+| 2026-08-23 | Overlay v3 (`5e7644b`) + Tier 2 (`a38afc0` render diff, `eacceb0` I/O + warm audio + deferred decorations) | old iPad | drag slow again; clears ~35 fps; first-move hitch | **PENDING owner device pass** (see checklist below). v3 = `position: absolute` + `grid-area: 1/1/-1/-1` + `inset: 0`: an abspos grid child with a grid placement resolves its box from its **grid area**, not the padding box — out of flow (layer kept) and track-aligned (no padding-box resolution, which was the iOS bug). Promotion restored to the measured-60fps pair (`will-change: transform` + `contain: strict`). Chrome: `hlΔ 0:(0.0,0.0) 63:(0.0,0.0)` with real non-zero rects. |
 
 **2026-08-22 reading.** Tier 1 alone did not fix the drag: the ghost is
 compositor-pure, so the remaining per-frame cost is **board-cell repaint churn**
@@ -254,6 +256,35 @@ de-filter them anyway, but the win must come from the cell paint diet + the
 inset-only line-hint. Next slice = Tier 3, in that shape. Plan B if the diet
 isn't enough: move preview/line-hint highlights to a dedicated overlay layer so
 board cells never repaint during a drag.
+
+## 8. Pending device pass (old iPad, `?perf=1`)
+
+Everything through Tier 4 is now implemented and pushed; this is the one open
+verification. Accept the service-worker "Refresh" toast first, or the iPad keeps
+serving the old build.
+
+1. **Drag** — fast full-board sweep with the biggest piece, both modes.
+   Expect **60 fps**. (Regression watch: v2's in-flow overlay lost this.)
+2. **Alignment, same run** — line-hint on a **top** row and on the **bottom**
+   row: rings sit on the bricks, and `hlΔ` reads ~0 at **both** `0:` and `63:`.
+   Both must hold — v2 traded one for the other.
+   *If fps is back but the bottom row drifts again:* that iOS build doesn't
+   support grid-area containing blocks for abspos children → fall back to
+   JS-positioned overlay geometry (set the overlay's top/left/width/height from
+   the cached grid metrics on layout change).
+3. **Drop frame** — trigger a 2–3 line clear with sound on: expect **≥ 50 fps**
+   (was ~35).
+4. **First placement of a cold session** — no hitch (audio is pre-warmed at
+   game entry now).
+5. **Soak** — ~5 min of play: `nodes` roughly flat (see the listener-counter
+   caveat below before reading `listeners` as a leak).
+
+Record results in §7. Criterion §1.1 (drag) and §1.2 (drop) both hinge on this.
+
+**Slice specs are deleted once consumed.** The four `slice-*.md` handoff docs
+(Tier 3 paint diet, plan-B overlay, iOS alignment, Tier 2 drop frame) were all
+implemented; their rationale lives in the commit messages and in §7 above, so
+they were removed rather than left to rot. Write a new one per dispatched slice.
 
 **Probe caveat (baseline 157 nodes / 23 listeners → 215 / 46 after 2 min):**
 the listener counter is net add/remove calls. `once: true` listeners (score/
