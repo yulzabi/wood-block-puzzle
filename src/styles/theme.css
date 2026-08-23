@@ -37,10 +37,38 @@
   --text: #f6ead9;
   --text-dim: #d8c3a6;
 
+  /* Gold reward ramp. Gold is THE celebratory/achievement color; it was four
+     near-identical ad-hoc values (combo/new-best solid, node-score, line-hint
+     ring, completed ring). Collapsed to a solid + a soft rgba form for rings/hints. */
+  --gold: #ffd479;
+  --gold-soft: rgba(255, 212, 121, 0.9);
+
+  /* Type scale (px values already clustered here; tokenized to stop drift). */
+  --fs-label: 11px; /* letterspaced labels */
+  --fs-meta: 13px;  /* secondary/meta text, small buttons */
+  --fs-body: 15px;  /* body copy */
+  --fs-chip: 18px;  /* chip counts */
+  --fs-value: 26px; /* headline values (SCORE, section titles) */
+  --fs-hero: 56px;  /* the big game-over score */
+
+  /* Spacing scale (4 / 8 / 12 / 16 / 24). */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  /* Elevation vocabulary — one definition each (values already in use). */
+  --elev-carve: inset 0 1px 0 rgba(255, 255, 255, 0.08); /* recessed panels: hud-box/gem-chip/stat-box */
+  --elev-raise: 0 4px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25); /* pill buttons */
+  --elev-float: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08); /* overlay panel */
+
   /* Layout */
   --app-max-width: 620px;
   --radius-block: 22%;
   --radius-panel: 18px;
+  --radius-card: 24px;  /* game-over / large panels */
+  --radius-pill: 999px; /* buttons, badges, chips */
 
   /* Safe-area insets (fall back to 0) */
   --safe-top: env(safe-area-inset-top, 0px);
@@ -127,7 +155,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: var(--sp-5);
   text-align: center;
   padding: 0 20px;               /* keep content off the frame edges */
 }
@@ -148,7 +176,7 @@ body {
 .subtitle {
   margin: -12px 0 0;
   color: var(--text-dim);
-  font-size: 15px;
+  font-size: var(--fs-body);
 }
 
 /* ---- Buttons ---- */
@@ -161,10 +189,8 @@ body {
   color: var(--text);
   background: linear-gradient(180deg, var(--wood-2), var(--wood-5));
   padding: 14px 34px;
-  border-radius: 999px;
-  box-shadow:
-    0 4px 0 rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--elev-raise);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
@@ -192,7 +218,7 @@ body {
 }
 .home-hint {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-dim);
 }
 
@@ -218,12 +244,12 @@ body {
 }
 .daily-card-stats {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-dim);
 }
 .daily-done {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-dim);
 }
 .daily-over-streak {
@@ -231,7 +257,7 @@ body {
 }
 .daily-over-note {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   color: var(--text-dim);
 }
 
@@ -240,11 +266,11 @@ body {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-top: 6px;
 }
 .home-actions .btn {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   padding: 8px 16px;
 }
 

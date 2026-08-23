@@ -9,7 +9,7 @@
   height: 100%;
   width: 100%;          /* fill the frame; parent .screen centers on cross-axis */
   gap: 14px;
-  padding: 4px;
+  padding: var(--sp-1);
 }
 
 /* ---- Landscape (touch devices, e.g. an iPad rotated) ----
@@ -60,12 +60,12 @@
   justify-content: space-between;
 }
 .game-menu-btn {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 700;
   padding: 7px 16px;
 }
 .game-hint-btn {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 700;
   padding: 7px 16px;
 }
@@ -99,7 +99,7 @@
   align-items: center;
   gap: 5px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   color: #2a1206;
@@ -115,7 +115,7 @@
 }
 .streak-badge__shield {
   position: relative;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   line-height: 1;
 }
 .streak-badge__shield::before {
@@ -146,7 +146,7 @@
   display: flex;
   justify-content: space-between;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 .hud-row[hidden] {
   display: none;
@@ -165,7 +165,7 @@
   padding: 8px 10px;
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.18);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--elev-carve);
 }
 /* .hud-box sets display:flex, which would override the default [hidden]; restore it. */
 .hud-box[hidden] {
@@ -189,9 +189,9 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px 6px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: rgba(0, 0, 0, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--elev-carve);
 }
 /* The chip's gem marker is a small inline-flow diamond, not an absolute overlay. */
 .gem-chip .gem {
@@ -201,19 +201,19 @@
   flex: 0 0 auto;
 }
 .gem-chip-count {
-  font-size: 18px;
+  font-size: var(--fs-chip);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .hud-label {
-  font-size: 11px;
+  font-size: var(--fs-label);
   letter-spacing: 1.5px;
   color: var(--text-dim);
 }
 
 .hud-value {
-  font-size: 26px;
+  font-size: var(--fs-value);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
@@ -327,7 +327,7 @@
 @media (pointer: coarse) {
   .cell.filled {
     background: var(--block);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -415,7 +415,7 @@
    Inset-only (no outer glow → never bleeds past the cell). Static — reduced-motion
    -safe. Distinct from the preview (which tints the landing cells green/red). */
 .hcell.line-hint {
-  box-shadow: inset 0 0 0 3px rgba(255, 216, 148, 0.95);
+  box-shadow: inset 0 0 0 3px var(--gold-soft);
 }
 
 .cell.just-placed {
@@ -455,7 +455,7 @@
 @media (pointer: coarse) {
   .block {
     background: var(--block);
-    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22);
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.22), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
   }
 }
 
@@ -465,7 +465,7 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   min-height: 96px;
   padding: 10px 6px;
   border-radius: var(--radius-panel);
@@ -559,11 +559,11 @@
 .combo-pop-mult {
   font-size: 34px;
   font-weight: 900;
-  color: #ffd479;
+  color: var(--gold);
 }
 .combo-pop-label {
   margin-top: 3px;
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 800;
   letter-spacing: 2px;
   color: var(--text);
@@ -586,9 +586,9 @@
   align-items: center;
   gap: 10px;
   padding: 28px 34px;
-  border-radius: 24px;
+  border-radius: var(--radius-card);
   background: linear-gradient(180deg, var(--board-bg), var(--board-inset));
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--elev-float);
   opacity: 0;
   transform: translateY(14px) scale(0.96);
 }
@@ -607,21 +607,21 @@
 }
 .gameover-score {
   margin: 0;
-  font-size: 56px;
+  font-size: var(--fs-hero);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .gameover-title {
   margin: 4px 0 0;
-  font-size: 26px;
+  font-size: var(--fs-value);
 }
 .gameover-best {
   margin: 0 0 8px;
   color: var(--text-dim);
 }
 .gameover-best.is-new {
-  color: #ffd479;
+  color: var(--gold);
   font-weight: 700;
 }
 
@@ -659,7 +659,7 @@
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--elev-carve);
 }
 .stat-value {
   margin: 0;
@@ -669,7 +669,7 @@
 }
 .stat-label {
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: var(--fs-label);
   letter-spacing: 1px;
   color: var(--text-dim);
 }
@@ -732,7 +732,7 @@
   color: var(--text);
   background: linear-gradient(180deg, var(--wood-2), var(--wood-5));
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .sw-toast__dismiss {
@@ -761,11 +761,11 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   margin-bottom: 8px;
 }
 .level-map-back {
-  font-size: 13px;
+  font-size: var(--fs-meta);
   font-weight: 700;
   padding: 7px 16px;
 }
@@ -834,9 +834,9 @@
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
 }
 .level-node-score {
-  font-size: 11px;
+  font-size: var(--fs-label);
   font-weight: 700;
-  color: #ffe08a;
+  color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -845,7 +845,7 @@
   box-shadow:
     0 4px 0 rgba(0, 0, 0, 0.35),
     inset 0 2px 0 rgba(255, 255, 255, 0.3),
-    0 0 0 3px rgba(255, 208, 120, 0.85);
+    0 0 0 3px var(--gold-soft);
 }
 /* Locked: a dim, undiscovered "?" place. */
 .level-node--locked {
