@@ -150,6 +150,23 @@ app.ts). Locked nodes = native `disabled` (not clickable/focusable). Replay rege
 - **Sequencing:** D1 first (token foundation, ~0 visual diff). D4 before D5 (unlocks derive from
   achievements). Per-slice: green+typecheck → owner device look-check → `?perf=1` for game surfaces →
   one commit → stop for review (plan §10).
+- [x] **D1 (5336436) — token consolidation + mobile bevel. CODE-ACCEPTED.** theme.css/game.css only;
+  `--gold`/`--gold-soft`, `--fs-*`, `--sp-*`, `--elev-*`, `--radius-card/pill` (count-asserted
+  value→token, ~0 desktop diff); one intended change = 2nd un-blurred bottom inset on `.cell.filled`/
+  `.block` under `@media(pointer:coarse)` (no filter/gradient — perf split intact); panel grain
+  deferred. 293 green. **PENDING owner iPad gate:** `?perf=1` drag ~60fps with the bevel (revert to
+  single-shadow if regresses) + eyeball (blocks bevelled, desktop unchanged).
+- [x] **D2 (0ab1aa2) — HUD status strip + score hero. CODE-ACCEPTED.** Reserved streak line now
+  carries left mode-tag (LEVEL N / ENDLESS / DAILY) + right streak badge (`space-between`, same
+  height, no jump); LEVEL relocated OUT of hud-box rows (gem-chip row gets full width); SCORE hero
+  (`flex:1.4`), BEST demoted to `--fs-chip`. **Badge slot preserved (P7 tests green + new assert
+  badge in `.hud-streak-line`).** Both variants render-asserted; `.hud-level` box absent. hud.ts/
+  game.css only, 297 green. **PENDING owner iPad gate (bundle w/ D1):** narrow-width — badge/BEST
+  no overlap; both HUD variants read w/ LEVEL relocated.
+  - [ ] **DEFERRED to D4 (1-line spine wiring):** `render()` gained a tested `context:'endless'|
+    'daily'` param, but `app.ts renderHud()` doesn't pass it yet → a daily run's tag shows ENDLESS
+    (cosmetic only; daily works). Fold `this.isDaily ? 'daily' : 'endless'` into D4 (already opens
+    app.ts). Added to D4 acceptance bar.
 - **Design invariants (perf/ethics-safe by construction):** cosmetics = CSS-variable swaps (no new
   paint); unlocks derived from achievements (one source of truth); skill-gated only (no RNG/currency);
   missed-day calendar cells neutral (no guilt).
