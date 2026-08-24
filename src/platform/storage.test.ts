@@ -30,6 +30,8 @@ import {
   loadDailySave,
   hasDailySave,
   clearDailySave,
+  loadAchievements,
+  recordAchievements,
 } from './storage';
 import { DEFAULT_DAILY_STATE, type DailyState } from '../core/daily';
 import type { GameState, Piece } from '../core/types';
@@ -807,5 +809,75 @@ describe('daily challenge persistence', () => {
       throw new Error('quota');
     });
     expect(() => saveDaily(richDaily)).not.toThrow();
+  });
+});
+
+describe('achievements ledger', () => {
+  const ACH_KEY = 'wbp.v1.achievements';
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('round-trips recorded unlocks with their dates', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    recordAchievements(['first-clear', 'double'], '2026-08-24');
+    expect(loadAchievements()).toEqual({ 'first-clear': '2026-08-24', double: '2026-08-24' });
+  });
+
+  it('returns {} when missing', () => {
+    vi.stubGlobal('localStorage', makeMockStorage().storage);
+    expect(loadAchievements()).toEqual({});
+  });
+
+  it('returns {} on corrupt JSON or a non-object blob', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(ACH_KEY, 'not json {');
+    expect(loadAchievements()).toEqual({});
+    map.set(ACH_KEY, JSON.stringify(['array', 'not', 'object']));
+    expect(loadAchievements()).toEqual({});
+  });
+
+  it('drops per-entry corruption (non-string dates)', () => {
+    const { storage, map } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    map.set(ACH_KEY, JSON.stringify({ good: '2026-08-24', bad: 42, alsoBad: null }));
+    expect(loadAchievements()).toEqual({ good: '2026-08-24' });
+  });
+
+  it('merge never un-unlocks and never overwrites an existing date', () => {
+    const { storage } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    recordAchievements(['a'], '2026-08-24'); // first unlock
+    recordAchievements(['a'], '2026-08-25'); // same id, later day — must NOT overwrite
+    recordAchievements(['b'], '2026-08-26'); // new id merges in; 'a' unchanged
+    expect(loadAchievements()).toEqual({ a: '2026-08-24', b: '2026-08-26' });
+  });
+
+  it('returns the merged ledger and is a no-op write when nothing is new', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    recordAchievements(['a'], '2026-08-24');
+    raw.setItem.mockClear();
+    const ledger = recordAchievements(['a'], '2026-08-24'); // already present → no write
+    expect(ledger).toEqual({ a: '2026-08-24' });
+    expect(raw.setItem).not.toHaveBeenCalled();
+  });
+
+  it('never throws when storage is unavailable', () => {
+    vi.stubGlobal('localStorage', undefined);
+    expect(() => loadAchievements()).not.toThrow();
+    expect(loadAchievements()).toEqual({});
+    expect(() => recordAchievements(['a'], '2026-08-24')).not.toThrow();
+  });
+
+  it('save is a silent no-op when setItem throws (quota exceeded)', () => {
+    const { storage, raw } = makeMockStorage();
+    vi.stubGlobal('localStorage', storage);
+    raw.setItem.mockImplementation(() => {
+      throw new Error('quota');
+    });
+    expect(() => recordAchievements(['a'], '2026-08-24')).not.toThrow();
   });
 });

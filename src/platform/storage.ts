@@ -667,3 +667,59 @@ export function saveDaily(state: DailyState): void {
     // Quota exceeded / disabled — silently ignore.
   }
 }
+
+// --- Achievements (unlock ledger) ---
+
+const ACHIEVEMENTS_KEY = 'wbp.v1.achievements';
+
+/**
+ * The unlock ledger: `{ [achievementId]: unlockedAtISODate }`. Never throws;
+ * corrupt / missing / unavailable → {}. Per-entry validated (string id → string
+ * date), so a single bad entry can't poison the map. Backward-compatible.
+ */
+export function loadAchievements(): Record<string, string> {
+  const storage = getStorage();
+  if (!storage) return {};
+  try {
+    const raw = storage.getItem(ACHIEVEMENTS_KEY);
+    if (raw === null) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [id, date] of Object.entries(parsed as Record<string, unknown>)) {
+      if (id && typeof date === 'string' && date) out[id] = date;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Merge newly-unlocked `ids` into the ledger, stamping each new one with
+ * `today` (an ISO date string, injected — no clock read here). Existing entries
+ * are never overwritten (dates are preserved) and never removed — the ledger
+ * only grows. Returns the merged ledger; persists only when it changed. Silent
+ * no-op on write failure.
+ */
+export function recordAchievements(ids: readonly string[], today: string): Record<string, string> {
+  const ledger = loadAchievements();
+  let changed = false;
+  for (const id of ids) {
+    if (!(id in ledger)) {
+      ledger[id] = today;
+      changed = true;
+    }
+  }
+  if (changed) {
+    const storage = getStorage();
+    if (storage) {
+      try {
+        storage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(ledger));
+      } catch {
+        // Quota exceeded / disabled — silently ignore.
+      }
+    }
+  }
+  return ledger;
+}
