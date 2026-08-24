@@ -252,12 +252,18 @@
 
 .board {
   /* --board-gap is shared with the .board-hl overlay's internal grid (its gaps
-     must match the tracks it spans); --board-pad is the board's own inset only. */
+     must match the tracks it spans); --board-pad is the board's frame inset. */
   --board-pad: 8px;
   --board-gap: 5px;
-  /* Positioned ancestor for the .board-hl overlay: the overlay's abspos
-     containing block is this element's PADDING box, and the overlay insets
-     itself by --board-pad onto the content box (where the cell tracks live). */
+  /* Positioned ancestor for the .board-hl overlay. Crucially, the board's 8px
+     frame inset is a TRANSPARENT BORDER, not padding — so the padding box (which
+     is the overlay's abspos containing block) and the content box (where the cell
+     tracks live) are the SAME rectangle. That removes the content-box/padding-box
+     gap iOS resolved inconsistently (the overlay could sit -8,-8 off, or drift
+     ~2px/row from a mis-sized height); the overlay's `inset: 0` and the cells now
+     reference one identical box, so they can't diverge on any engine. The wood
+     frame still shows: background-clip defaults to border-box, so the gradient
+     paints under the transparent border band. */
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
@@ -273,8 +279,10 @@
   /* Suppress native pan/zoom on the board itself (the .play-surface ancestor
      also sets this) so touch drags never scroll or zoom the page. */
   touch-action: none;
-  padding: var(--board-pad);
+  border: var(--board-pad) solid transparent; /* frame inset (see note above) — NOT padding */
   border-radius: var(--radius-panel);
+  /* background-clip defaults to border-box, so this gradient shows through the
+     transparent frame border (the wood recess look). */
   background:
     linear-gradient(180deg, var(--board-bg), var(--board-inset));
   box-shadow:
@@ -362,24 +370,18 @@
 .board-hl {
   /* OUT OF FLOW so highlight churn during a drag repaints only this cheap,
      mostly-transparent layer — never the board's fill/gem texture (that was the
-     measured drag-lag remainder). It must overlay the cell TRACKS, which live in
-     the board's square CONTENT box (padding box inset by --board-pad).
-
-     The catch (learned on device, perf plan §7): iOS resolves this abspos box's
-     containing block ASYMMETRICALLY — its WIDTH is the padding box (correct) but
-     its HEIGHT is the content box. So anything that derives height from the CB
-     (inset all sides / height:100% / bottom) comes out ~16px short and drifts
-     ~2px/row (hlΔ 0:(0,0) 63:(0,-14)); a uniform grid-area/inset:0 instead sat
-     -8,-8 off. Fix: never consult the CB height. Anchor top+left at --board-pad,
-     set the WIDTH via left+right (the CB width iOS gets right), and derive the
-     HEIGHT from aspect-ratio 1/1 (the board is square) — so the overlay is
-     exactly the content box on every engine. Requires `position: relative` on
-     .board; keep it out of flow (an in-flow grid item lost the 60fps win). */
+     measured drag-lag remainder). It must overlay the cell TRACKS. Because the
+     board's frame inset is now a transparent BORDER (not padding), .board's
+     padding box == content box == the cell-track rectangle, so this abspos box's
+     containing block IS that rectangle: a plain `inset: 0` lands the overlay
+     exactly on the cells — no engine-specific containing-block math, no offset,
+     no per-row drift. (Earlier, with the board using `padding`, iOS mis-resolved
+     the padding-vs-content gap: grid-area/inset:0 sat -8,-8 off, and any
+     height-from-the-CB approach drifted ~2px/row to hlΔ 63:(0,-14).) Requires
+     `position: relative` on .board; keep it out of flow (an in-flow grid item
+     lost the 60fps win). */
   position: absolute;
-  top: var(--board-pad);
-  left: var(--board-pad);
-  right: var(--board-pad);
-  aspect-ratio: 1 / 1;
+  inset: 0;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
