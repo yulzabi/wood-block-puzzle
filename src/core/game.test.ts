@@ -626,7 +626,15 @@ describe('applyMove — streak grace', () => {
   });
 });
 
-describe('applyMove — a refill can immediately end the game', () => {
+// The tray refill routes through generateSolvableTray against the current board
+// (P8a's opening-deal guarantee, extended to the refill): a fresh hand always has
+// a legal placement as dealt, so the game can't end by dealing a dead hand.
+// (Previously the refill used a plain uniform draw and COULD deal an unplaceable
+// hand -> instant game-over/level-failed; those two old tests are intentionally
+// converted below to assert the new, fixed behavior. A genuine self-inflicted
+// dead-end — unplaced tray pieces that no longer fit, no refill — still ends the
+// game; see 'emits a gameover event when the last move leaves no fitting piece'.)
+describe('applyMove — the tray refill is solvable-at-deal (extends P8a to the refill)', () => {
   // Board filled except isolated (non-adjacent) empties — two per row/col spaced 4
   // apart — so ONLY a 1x1 `single` can ever be placed here.
   const isolatedBoard = (): Uint8Array => {
@@ -638,7 +646,7 @@ describe('applyMove — a refill can immediately end the game', () => {
     return b;
   };
   // An rngState whose next 3-piece deal contains no `single` (the only shape that
-  // could fit the isolated board), so the refill is guaranteed unplaceable.
+  // fits the isolated board), so a plain uniform refill would be a dead hand.
   const noSingleRng = (): number => {
     for (let s = 1; s < 1_000_000; s++) {
       const { pieces } = generatePieces(s, 0, TRAY_SIZE);
@@ -646,52 +654,77 @@ describe('applyMove — a refill can immediately end the game', () => {
     }
     throw new Error('no no-single rng found');
   };
+  const lastPieceTray = (): Piece[] => [
+    piece('a', single, 1, true),
+    piece('b', single, 1, true),
+    piece('c', single),
+  ];
 
-  it('endless: exhausting the tray into an unplaceable refill ends in gameover', () => {
-    const tray = [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)];
-    const state = playing(isolatedBoard(), tray, 0, 0, 0, noSingleRng());
+  it('endless: a refill a uniform draw would dead-end on is re-drawn to a solvable hand', () => {
+    const board = isolatedBoard();
+    const seed = noSingleRng();
+    // Precondition: the raw uniform refill (same rng, seq after the 3 placed) fits nowhere.
+    expect(trayHasPlacement(board, generatePieces(seed, TRAY_SIZE, TRAY_SIZE).pieces)).toBe(false);
 
-    // Place the last piece in an isolated empty: no line completes, so no clear.
+    const state = playing(board, lastPieceTray(), 0, 0, 0, seed);
+    // Place the last piece in an isolated empty: no line completes, so the board
+    // stays mostly-full and the tray refills against it.
     const res = applyMove(state, { type: 'place', pieceId: 'c', at: { row: 0, col: 0 } });
 
     expect(res.ok).toBe(true);
     expect(types(res.events)).toContain('refill');
     expect(types(res.events)).not.toContain('cleared');
-    expect(res.state.tray.every((p) => !p.placed)).toBe(true); // the fresh, unplaceable hand
-    expect(res.state.status).toBe('gameover');
-    expect(types(res.events)).toContain('gameover');
+    // The refill is solvable AS DEALT → the game does NOT dead-end.
+    expect(trayHasPlacement(res.state.board, res.state.tray)).toBe(true);
+    expect(res.state.status).toBe('playing');
+    expect(types(res.events)).not.toContain('gameover');
   });
 
-  it('levels: an unplaceable refill fails the level', () => {
-    const gems = createBoard();
-    gems[idx(2, 2)] = 1; // a gem on a filled cell -> survives, so not complete
-    const tray = [piece('a', single, 1, true), piece('b', single, 1, true), piece('c', single)];
+  it('levels (gems): the solvable refill still gem-attaches and drains supply on deal', () => {
     const state: GameState = {
       board: isolatedBoard(),
-      tray,
+      tray: lastPieceTray(),
       score: 0,
       highScore: 0,
       status: 'playing',
       rngState: noSingleRng(),
-      pieceSeq: tray.length,
+      pieceSeq: TRAY_SIZE,
       streak: 0,
       streakGraceUsed: false,
       mode: 'levels',
       level: 4,
-      goalType: 'score',
-      targetScore: 9999,
-      gems,
-      quotas: { 1: 1 },
+      goalType: 'gems',
+      targetScore: 0,
+      gems: createBoard(),
+      quotas: { 1: 30 },
       gemsCleared: {},
-      gemSupplyRemaining: {},
+      gemSupplyRemaining: { 1: 30 },
     };
 
     const res = applyMove(state, { type: 'place', pieceId: 'c', at: { row: 0, col: 0 } });
 
     expect(res.ok).toBe(true);
     expect(types(res.events)).toContain('refill');
-    expect(res.state.status).toBe('levelfailed');
-    expect(types(res.events)).toContain('levelfailed');
+    // Solvable refill → not a dead-end / level-failed.
+    expect(trayHasPlacement(res.state.board, res.state.tray)).toBe(true);
+    expect(res.state.status).toBe('playing');
+    // Gem-attach still rides the refill: supply drained by exactly the gems dealt onto it.
+    const dealt = res.state.tray.reduce((n, p) => n + (p.gems ? Object.keys(p.gems).length : 0), 0);
+    expect(res.state.gemSupplyRemaining[1]).toBe(30 - dealt);
+  });
+
+  it('deterministic: same board + seed → identical refilled tray', () => {
+    const run = (): GameState =>
+      applyMove(playing(isolatedBoard(), lastPieceTray(), 0, 0, 0, noSingleRng()), {
+        type: 'place',
+        pieceId: 'c',
+        at: { row: 0, col: 0 },
+      }).state;
+    const a = run();
+    const b = run();
+    expect(a.tray.map((p) => p.shape.id)).toEqual(b.tray.map((p) => p.shape.id));
+    expect(a.rngState).toBe(b.rngState);
+    expect(a.pieceSeq).toBe(b.pieceSeq);
   });
 });
 

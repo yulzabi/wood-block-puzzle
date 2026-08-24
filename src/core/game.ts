@@ -9,7 +9,7 @@
 import type { Coord, GameEvent, GameState, GameStatus, Move, MoveResult, Piece, RejectReason } from './types';
 import { TRAY_SIZE } from './types';
 import { canPlace, clearLines, createBoard, findFullLines, hasAnyPlacement, idx, inBounds, place } from './board';
-import { attachGems, generatePieces, generateSolvableTray } from './pieces';
+import { attachGems, generateSolvableTray } from './pieces';
 import { generateLevel } from './levels';
 import { lineClearScore, placementScore, streakMultiplier } from './scoring';
 import { seedState } from './rng';
@@ -274,14 +274,20 @@ export function applyMove(state: GameState, move: Move): MoveResult {
     events.push({ type: 'combo', streak, multiplier, lines: lineCount, graceReady: !streakGraceUsed });
   }
 
-  // 5. Mark the piece placed; refill when the whole tray is exhausted. On gem
-  //    levels the fresh tray also draws gems, draining supply (decrement-on-deal).
+  // 5. Mark the piece placed; refill when the whole tray is exhausted. The refill
+  //    is drawn against the CURRENT (post-placement/-clear) board via
+  //    generateSolvableTray, extending P8a's solvability guarantee to the refill:
+  //    at least one of the three always has a legal placement as dealt, so the
+  //    game can't end by dealing a dead hand. (This guarantees the deal, NOT that
+  //    all three fit — a genuine dead-end from the player filling the board is
+  //    still a correct game-over.) On gem levels the fresh tray then draws gems,
+  //    draining supply (decrement-on-deal), exactly as before.
   let tray: Piece[] = state.tray.map((p) => (p.id === move.pieceId ? { ...p, placed: true } : p));
   let rngState = state.rngState;
   let pieceSeq = state.pieceSeq;
   let gemSupplyRemaining = state.gemSupplyRemaining;
   if (tray.every((p) => p.placed)) {
-    const refill = generatePieces(state.rngState, state.pieceSeq, TRAY_SIZE);
+    const refill = generateSolvableTray(board, state.rngState, state.pieceSeq, TRAY_SIZE);
     tray = refill.pieces;
     rngState = refill.rngState;
     pieceSeq = refill.nextSeq;
