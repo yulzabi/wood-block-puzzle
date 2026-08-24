@@ -255,8 +255,9 @@
      must match the tracks it spans); --board-pad is the board's own inset only. */
   --board-pad: 8px;
   --board-gap: 5px;
-  /* Containing block for the .board-hl overlay: required so the overlay's
-     grid-area (not the padding box) resolves its abspos box. */
+  /* Positioned ancestor for the .board-hl overlay: the overlay's abspos
+     containing block is this element's PADDING box, and the overlay insets
+     itself by --board-pad onto the content box (where the cell tracks live). */
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
@@ -359,21 +360,23 @@
    this cheap, mostly-transparent layer, never the board's fill/gem texture
    (measured: whole-board damage unions were the drag-lag remainder). */
 .board-hl {
-  /* OUT OF FLOW, but sized by the GRID: an absolutely-positioned grid child with
-     a grid-placement uses its GRID AREA as its containing block, so `inset: 0`
-     makes this box exactly the area the 8x8 tracks occupy — same track math that
-     places the cells (aligned by construction), with no dependence on how an
-     engine resolves a padding box. Both halves matter and were learned on device:
-       - padding-box abspos (`inset:0` + `padding`) misaligned on iOS: the height
-         resolved 16px (2xpad) short, drifting highlights 2px per row
-         (hlΔ 63:(0.0,-14.0));
-       - an IN-FLOW grid item aligned correctly but gave back the drag-perf win
-         (60fps -> slow again on device), so the overlay must stay out of flow.
-     Requires `position: relative` on .board (so the grid container is this
-     element's containing block). See perf plan §7, 2026-08-22. */
+  /* OUT OF FLOW so highlight churn during a drag repaints only this cheap,
+     mostly-transparent layer — never the board's fill/gem texture (that was the
+     measured drag-lag remainder). It must overlay the cell TRACKS, which live in
+     the board's CONTENT box. An abspos child's containing block is .board's
+     PADDING box, so inset it by --board-pad on every side to land exactly on the
+     content box. Learned on device (perf plan §7):
+       - `grid-area: 1/1/-1/-1` + `inset: 0` relied on the grid area being the
+         containing block, but iOS resolved it to the padding box and shifted the
+         whole layer -8px,-8px (== --board-pad) uniformly (hlΔ 0 & 63 both -8,-8).
+         A plain padding-box inset is engine-consistent instead.
+       - Do NOT give this element its own `padding`: an `inset:0` + own-`padding`
+         version mis-resolved its height under size containment on iOS and drifted
+         ~2px/row (hlΔ 63:(0.0,-14.0)).
+       - It must stay OUT OF FLOW (an in-flow grid item gave back the 60fps win).
+     Requires `position: relative` on .board. */
   position: absolute;
-  grid-area: 1 / 1 / -1 / -1;
-  inset: 0;
+  inset: var(--board-pad);
   display: grid;
   grid-template-columns: repeat(var(--board-size, 8), 1fr);
   grid-template-rows: repeat(var(--board-size, 8), 1fr);
