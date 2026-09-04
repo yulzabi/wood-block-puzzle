@@ -19,12 +19,12 @@
     "lighthouse": "node scripts/run-lighthouse.mjs"
   },
   "devDependencies": {
-    "@types/node": "26.2.0",
+    "@types/node": "26.4.0",
     "@vitest/coverage-v8": "4.1.11",
     "chrome-launcher": "1.2.1",
-    "happy-dom": "20.11.6",
+    "happy-dom": "20.12.0",
     "lighthouse": "13.4.1",
-    "sharp": "0.35.3",
+    "sharp": "0.35.4",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vite-plugin-pwa": "1.3.0",
